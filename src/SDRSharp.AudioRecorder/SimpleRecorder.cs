@@ -372,7 +372,7 @@ public class SimpleRecorder : IDisposable
 			}
 			_wavWriter.Write(_bufferPtr, _audioBufferLength);
 		}
-		unsafe float* localPtr = _bufferPtr;
+		float* localPtr = _bufferPtr;
 		while (localPtr != null && _audioBuffer != null && _audioBuffer.Length >= _audioBufferLength && _audioBufferLength > 0 && !_wavWriter.IsStreamFull)
 		{
 			_audioBuffer.Read(localPtr, _audioBufferLength);
