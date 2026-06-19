@@ -1,0 +1,316 @@
+ Changelog                                                                         16th December 2023
+=====================================================================================================
+=  Audio Recorder - SDR# plug-in                                                                    =
+=                          by Vasili (TSSDR) & Ian Gilmour and updated and modified by thewraith    =
+=====================================================================================================
+=====================================================================================================
+
+Sticky NOTE: Details about SDR# 1778+ and this plug-in: (not a complete list)
+
+- The Telerik UI that SDR# (1732+) now uses poses some problems for the (free) plug-in developers.
+  - The Telerik controls are NOT free to use and so we need to use the standard/user controls the best we can.
+    These controls are limited in what can be done to them to adapt them to be used with the Telerik UI to
+     minimise the jarring differences.
+    The progressbar colours cannot be changed.
+    In dark themes, these limits become more noticeable.
+
+NOTE: While I have been trying to maintain backwards compatibility with older SDR# versions, this is becoming
+       more laborious. Specifically versions from 1717-1777 may not be displayed as intended.
+      Testing the plug-in with effectively three different types of SDR# is now required. (pre-Telerik, Telerik with side panel, Telerik with dock control)
+
+=====================================================================================================
+
+1.3.11.0 - Release                                                                        19th June 2026
+
+Fixed: Race conditions in DiskWriterThread (SimpleRecorder)
+- _diskWriterRunning and _diskWriterPause fields were not marked volatile.
+  Without volatile, the CPU/JIT could cache the values and the recording thread would never
+  see the stop signal from the UI thread, causing a hung thread on Stop.
+  Both fields are now declared volatile.
+
+Fixed: Potential use-after-free in DiskWriterThread drain loop (SimpleRecorder)
+- After the main recording loop exits, the drain loop used _bufferPtr directly.
+  A concurrent Dispose() call could free the underlying buffer while the drain loop
+  was still reading from it. The pointer is now captured into a local variable with a
+  null-check before the drain loop runs.
+
+Fixed: WAV file header not written when stream stops due to full disk/size limit (SimpleRecorder / SimpleWavWriter)
+- If DiskWriterThread exited because IsStreamFull became true, it would set
+  _diskWriterRunning = false but the WAV header would only be updated when StopRecording()
+  eventually called Flush(). If the application crashed in that window, the file was corrupt.
+  DiskWriterThread now calls _wavWriter.Close() directly before signalling completion.
+  SimpleWavWriter.Close() is now idempotent (returns instead of throwing when already closed).
+
+Fixed: WAV file left open if Thread.Join() throws in StopRecording() (SimpleRecorder)
+- StopRecording() now wraps the Join() call in try/finally to guarantee Flush() runs
+  and the WAV file is properly closed even if an exception occurs.
+
+Fixed: StereoToMono discarded right channel entirely (SimpleWavWriter)
+- The conversion loop was writing data[num] (left channel only) instead of averaging
+  both channels. PCM8Mono and PCM16Mono recordings lost all audio from the right channel.
+  Fixed to: (data[num] + data[num + 1]) * 0.5f
+
+Fixed: UpdateLength() called on every audio buffer write causing excessive disk seeks (SimpleWavWriter)
+- WriteStream() called UpdateLength() for every audio block written, which performs
+  two Seek() + two Write() operations per call. Under normal recording rates this causes
+  significant unnecessary disk I/O. UpdateLength() is now called only in Close().
+
+Fixed: Incorrect recording duration calculation for PCM16Stereo, Float32, PCM16Mono (AudioRecorderPanel)
+- _writeLength was calculated as bytesWritten / _recordSamplerate, which did not account
+  for bytes-per-sample (2 for PCM16, 4 for Float32). This caused:
+    PCM16Stereo: duration 2x too high
+    Float32:     duration 4x too high
+    PCM16Mono:   duration 2x too high
+  The calculation now uses the correct bytes-per-frame divisor for each format.
+  The incorrect compensation (num3 /= 2) in the display timer was also removed.
+
+Fixed: _fileIndexer not reset between recording sessions (AudioRecorderPanel)
+- The conflict-avoidance file index counter was never reset when starting a new recording
+  session. Files from subsequent sessions would continue numbering from the previous session.
+  _fileIndexer is now reset to 0 each time recording starts.
+
+Fixed: New file created on frequency change even when option was disabled (AudioRecorderPanel)
+- The condition for creating a new file on frequency change was:
+    _oldFrequency != _control.Frequency && (NewFileFrequencyEnable || SignalIsActive())
+  This incorrectly triggered a new file whenever the frequency changed AND the squelch was
+  open, regardless of the NewFileFrequencyEnable setting. Fixed to check only:
+    _oldFrequency != _control.Frequency && NewFileFrequencyEnable
+
+=====================================================================================================
+
+1.3.10.0 - Release
+
+Fixed: 'Sample Format' '32 Bit IEEE Float Stereo'
+- Recording with this Sample Format would see stuttering of audio because of an oversized buffer used for write buffer.
+  Only half of this buffer was been written too, the other half was blank.
+  I guess no-one ever uses '32 Bit IEEE Float Stereo' as it looks like it never worked going back to Vasili's original version.
+
+MD5 HASH: 72e7761dc5c1b6a0276c4da4d09dc105 (SDRSharp.AudioRecorder.dll)
+          b45b078da1043a57e7e3852e5cbbbeba (SDRSharp.PluginsCom.dll)
+
+=====================================================================================================
+
+1.3.9.0 - Release
+
+Added: Use UTC timestamp in final filename (if rule added to use it in path/filename)
+
+Changed: The 'time' rule was not shown in label of available rules in Configure > File options
+
+Updated PDF documentation - Please read it
+
+
+MD5 HASH: 64bcca4077e7a8f696415b68f91cf982 (SDRSharp.AudioRecorder.dll)
+          b45b078da1043a57e7e3852e5cbbbeba (SDRSharp.PluginsCom.dll)
+
+=====================================================================================================
+
+1.3.8.0 - Release
+
+Change: Tweak the fix done in v1.3.7.0
+- Should auto detect which valid scaling ranges to use with different SDR# versions (when v1918+)
+  SDR# up to v1917: 50000-500000
+  SDR# v1918+     :     2-    15 (these values will be divided by 10 internally for scaling of 0.2 to 1.5)
+- Still allow manual fine adjustment of the scaling values for SDR# v1918+
+- See documentation for more details on changing these values.
+
+NOTE: The scaling value error handling may trigger when SDR# is started.
+      The pop-up dialog maybe behind the SDR# start logo, you can drag this logo aside to get to the dialog.
+      - This dialog may appear up to 8 times. Once the error(s) are cleared, you should not see them on following SDR# restarts.
+
+
+MD5 HASH: 6619496a84a9bd0a1d2269b2aa392fe5 (SDRSharp.AudioRecorder.dll)
+          b45b078da1043a57e7e3852e5cbbbeba (SDRSharp.PluginsCom.dll)
+
+=====================================================================================================
+
+1.3.7.0 - Non-public Release (Limited testing)
+
+Fix: For audio recordings with hiss using SDR# v1918+
+- The scaling values used are now to high to use with SDR# v1918+
+
+ Add option to override defined values and just use value 1 for all
+
+=====================================================================================================
+
+1.3.6.0 - Release - Minor
+
+Fix: Folder Select
+- A crash ("Object must be a root directory ("C:\") or a drive letter ("C").") was seen when trying to use UNC paths.
+- Now blocking the ability to use UNC paths (which are not supported)
+  Drive information is not available when using UNC paths
+- You can still use a network drive, but only when it's a mapped network path
+
+NOTE: Using network paths may be an issue if the drive can spindown/sleep
+- It may cause temporary hangs while it waits for HDD to spin up again.
+
+
+MD5 HASH: 435e12af20eafc8339c8d39074de16ec (SDRSharp.AudioRecorder.dll)
+          b45b078da1043a57e7e3852e5cbbbeba (SDRSharp.PluginsCom.dll)
+
+=====================================================================================================
+
+1.3.5.0 - Release - Minor
+
+Changed: Assembly info
+- No funtional changes
+
+
+MD5 HASH: 0dddcb6bda22d9bd3d615177a6872da9 (SDRSharp.AudioRecorder.dll)
+          b45b078da1043a57e7e3852e5cbbbeba (SDRSharp.PluginsCom.dll)
+
+=====================================================================================================
+
+1.3.4.0 - NOT Release - Minor
+
+Changed: Refactored delegate/event
+- No functional changes
+
+=====================================================================================================
+
+1.3.3.0 - NOT Release
+
+Changed: HDD full handling
+- Buffer overflow may occur when close to full HDD
+  Increased the working FIFO size (allow wiggle room)
+
+=====================================================================================================
+
+1.3.2.0 - Release
+
+Fixed: Handling of recording when HDD full
+- It's also noticed that dropped buffers may occur when just about to run out of HDD space.
+  This may be related to fragmentation of HDD.
+
+Fixed/Updated: PDF documentation
+- Had wrong MagicLine
+- Please read it.
+
+MD5 HASH: 51772b4a4c20a22ffc161f14f51c68a2 (SDRSharp.AudioRecorder.dll)
+          b45b078da1043a57e7e3852e5cbbbeba (SDRSharp.PluginsCom.dll)
+
+=====================================================================================================
+
+1.3.1.0 - Minor Release
+
+Changed: Temporary filename
+- Append hhmmss to temporary filename (this appended string is only generated at SDR# start)
+  This should be sufficient to make the filename unique so when more than one SDR# is used with same base folder,
+   there won't be a file access conflict.
+- It would probably be better not to have different instances pointing to same base folder.
+
+Changed: Error trapping
+- Some errors would continue repeating when the dialog was showing which would result in multiple dialogs showing.
+
+
+MD5 HASH: 82cdf7dcc59b206397886e4a3fea213c (SDRSharp.AudioRecorder.dll)
+          b45b078da1043a57e7e3852e5cbbbeba (SDRSharp.PluginsCom.dll)
+
+=====================================================================================================
+
+1.3.0.0 - Release
+
+Added: Ability for user to change default audio scaling values for each mode.
+- Changed via file 'SDRSharp.exe.config' or 'SDRSharp.config'.
+  see PDF documentation.
+
+Changed: Some minor renaming
+- Added Numberboxes ranges e.g. [0 - 100].
+- Sample format: "32 Bit IEEE Float" to "32 Bit IEEE Float Stereo"
+- "Continue recording after the squelch has been closed, second" to "Continue recording after the squelch has been closed for X seconds"
+- "Waiting time to create a new file, second" to "Waiting time to create a new file after X seconds"
+- 'no resampling' to 'no re-sampling'
+
+Added: Free HDD space check
+- Will stop recording when < 10 Mb HDD space remains
+  While not tested (seen in other plug-ins), the plug-in would probably cause SDR# to crash when run
+   out of HDD space.
+
+Changed: UI layout
+- Center labels for current , total and dropped buffers lines
+- Should allow more information to fill each line in the fixed width versions of SDR#
+  Newer versions of SDR# allow for adjustable width.
+
+Added: Simple debug information
+- see PDF documentation.
+
+Created: PDF documentation
+- Please read it.
+
+
+MD5 HASH: 40a3ec0e3517e39790058515ae039f18 (SDRSharp.AudioRecorder.dll)
+          b45b078da1043a57e7e3852e5cbbbeba (SDRSharp.PluginsCom.dll)
+
+=====================================================================================================
+
+1.2.0.0 - Limited (non public) Release
+
+Changed: Reduced NFM audio scaling value
+- Audio level was hitting 0dB, new value aims for -6dB.
+
+Added: Use a separate audio scaling value for:
+- LSB/USB/DSD (same value use by all three)
+- WFM
+- The CW and RAW will continue to use original value
+- I have tested this a little but it may still require further adjustment.
+
+Change: Make configure window width adjustable
+- Allows to see wide rules
+
+Changed: Minimum for 'Create a new file if the file size > MB'
+- Was 0 Mb which is probably not a good value to use.
+  The lowest value is now 3 Mb.
+
+Changed: Some minor renaming
+- 'Autostart recording' to 'Auto-start recording'
+- 'Write all in one file' to 'Write all activity in one file'
+- 'without resample' to 'no resampling'
+
+
+MD5 HASH: be98d9344fc2d012004924573816dfdd (SDRSharp.AudioRecorder.dll)
+          b45b078da1043a57e7e3852e5cbbbeba (SDRSharp.PluginsCom.dll)
+
+=====================================================================================================
+
+1.1.0.0 - Limited (non public) Release
+
+Changed: Code for using non Telerik controls in the SDR# Telirik UI
+- Refactored some code to simplify the colour selection use for non Telerik controls
+- Tweak some of the non Telerik controls re-paint code
+- NOTE: This is not intended to match all theme colors.
+
+Changed: Use different audio scaling value for Detector (only AM, NFM)
+- The recordings normally suffer from low audio levels for each mode.
+  Using a separate value increases the audio level for AM/NFM.
+- This value is currently fixed value for each mode (AM, NFM).
+  May make adjustable for all modes later.
+
+Changed: UI updating
+- When recording the times where a little jumpy.
+- It is also notice that times are not correct for seen duration.
+
+
+MD5 HASH: 84a91e0ad68ff7d2629175338e8658c8 (SDRSharp.AudioRecorder.dll)
+          b45b078da1043a57e7e3852e5cbbbeba (SDRSharp.PluginsCom.dll)
+
+=====================================================================================================
+
+1.0.1.0 - Initial release (not public)
+
+Changes/Fix: UI improvements for using with SDR# v1732+ with Telerik UI
+
+Fixed: 'Folder select' and 'Open folder' initial open folder.
+Added: ToolTip for buttons 'Folder select' and 'Open folder' to show current base folder.
+
+NOTE: Record audio gain
+- It's noticed that the audio level is low on this recorded files.
+  Will look into this sometime.
+
+No documentation supplied
+
+=====================================================================================================
+
+v0.0.0.0
+
+ Any version by TSSDR (Vasili)
+
+ Development history unknown, see his website http://rtl-sdr.ru for possible more details of past releases.
