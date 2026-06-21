@@ -25,15 +25,13 @@ jobs:
     - name: Restore dependencies
       run: dotnet restore src/SDRSharp.AudioRecorder/SDRSharp.AudioRecorder.csproj
 
-    - name: Build
-      run: dotnet build src/SDRSharp.AudioRecorder/SDRSharp.AudioRecorder.csproj --configuration Release --no-restore
-
     - name: Get version
       id: get_version
       shell: pwsh
       run: |
         if ($env:GITHUB_REF -match 'refs/tags/v(.*)') {
           $version = $matches[1]
+          $informationalVersion = $version
         } else {
           # Get last tag or start with 0.0.0
           $lastTag = git describe --tags --abbrev=0 2>$null
@@ -63,10 +61,27 @@ jobs:
           }
           
           $version = "$major.$minor.$patch"
+          
+          # For branch builds, add branch name and build number
+          $branchName = "${{ github.ref_name }}" -replace '[^a-zA-Z0-9-]', '-'
+          $buildNumber = "${{ github.run_number }}"
+          $informationalVersion = "$version+$branchName.$buildNumber"
         }
         
         echo "VERSION=$version" >> $env:GITHUB_OUTPUT
-        echo "Version: $version"
+        echo "INFORMATIONAL_VERSION=$informationalVersion" >> $env:GITHUB_OUTPUT
+        echo "ASSEMBLY_VERSION=$version.0" >> $env:GITHUB_OUTPUT
+        echo "Version: $version, InformationalVersion: $informationalVersion"
+
+    - name: Build
+      run: >
+        dotnet build src/SDRSharp.AudioRecorder/SDRSharp.AudioRecorder.csproj
+        --configuration Release
+        --no-restore
+        /p:Version=${{ steps.get_version.outputs.VERSION }}
+        /p:AssemblyVersion=${{ steps.get_version.outputs.ASSEMBLY_VERSION }}
+        /p:FileVersion=${{ steps.get_version.outputs.ASSEMBLY_VERSION }}
+        /p:InformationalVersion=${{ steps.get_version.outputs.INFORMATIONAL_VERSION }}
 
     - name: Package DLLs
       shell: pwsh
