@@ -54,6 +54,8 @@ recorder-fenix/
 │       ├── WavFormatHeader.cs
 │       └── WavSampleFormat.cs
 ├── SDRSharp.AudioRecorder.dll          — оригінальний DLL v1.3.10.0
+├── SDRSharp.Common.dll                 — залежність SDR# (rev 1921)
+├── SDRSharp.Radio.dll                  — залежність SDR# (rev 1921)
 ├── SDRSharp.PluginsCom.dll
 ├── Audio_Recorder.pdf                  — оригінальна документація
 └── changelog.txt
@@ -61,56 +63,57 @@ recorder-fenix/
 
 ---
 
-## Як зібрати нову версію (Windows)
+## Як зібрати нову версію
 
-> **Збірка можлива тільки на Windows.** Плагін цілить у `.NET Framework 4.6` і використовує Windows Forms — ці технології не підтримуються на Linux/macOS.
+Плагін цілить у `.NET Framework 4.6`. Проєкт використовує SDK-стиль із пакетом
+`Microsoft.NETFramework.ReferenceAssemblies.net46`, тому збирається як на **Windows**,
+так і на **Linux/macOS** — потрібен лише .NET SDK (6.0+), без Visual Studio.
+
+> ⚠️ **Важливо:** проєкт навмисно НЕ використовує `Microsoft.NET.Sdk.WindowsDesktop`
+> і `UseWindowsForms`. Цей SDK на не-Windows (а також у деяких конфігураціях) підставляє
+> у вихідний DLL збірки з **.NET Core / .NET 9** (наприклад `System.IO.FileSystem.DriveInfo
+> v9.0.0.0`). SDR# працює на .NET Framework, де таких збірок немає, і плагін падає з
+> `Could not load file or assembly ... Version=9.0.0.0`. Не повертайте WindowsDesktop SDK.
 
 ### Вимоги
 
-- **Windows 10/11**
-- **Visual Studio 2022** (Community або вище) із компонентом:
-  - `.NET desktop development`
-- **SDR#** — встановлена версія (потрібні DLL з папки інсталяції)
+- **.NET SDK 6.0 або новіший** ([dotnet.microsoft.com/download](https://dotnet.microsoft.com/download))
+  — на Windows підійде Visual Studio 2022 з компонентом `.NET desktop development`.
+- **SDR#** — потрібні три DLL: `SDRSharp.Common.dll`, `SDRSharp.Radio.dll`,
+  `SDRSharp.PluginsCom.dll`. Вони вже лежать у корені репозиторію (rev 1921);
+  за потреби замініть їх на DLL зі своєї версії SDR#.
 
-### Крок 1 — Скопіювати залежності SDR#
+### Крок 1 — Очистити старі артефакти
 
-Скопіюйте наступні файли з папки SDR# (наприклад `C:\SDRSharp\`) в папку `src/` проєкту:
+Якщо раніше збирали зі старим csproj — приберіть кеш:
 
-```
-SDRSharp.Common.dll
-SDRSharp.Radio.dll
-```
-
-> Ці файли не включені в репозиторій — вони є частиною SDR# і мають різні версії залежно від збірки SDR#.
-
-### Крок 2 — Відкрити проєкт
-
-```
-src/SDRSharp.AudioRecorder.csproj
+```bash
+cd src
+rm -rf obj bin          # Windows: rmdir /s /q obj bin
 ```
 
-Відкрийте у Visual Studio 2022 (подвійний клік або `File → Open → Project`).
+### Крок 2 — Зібрати
 
-### Крок 3 — Перевірити посилання
-
-У Solution Explorer → References переконайтесь що `SDRSharp.Common` і `SDRSharp.Radio` не мають жовтого знаку питання. Якщо є — правою кнопкою → `Add Reference` → вкажіть шлях до скопійованих DLL.
-
-### Крок 4 — Збілдити
-
-```
-Build → Build Solution   (Ctrl+Shift+B)
+```bash
+cd src
+dotnet build SDRSharp.AudioRecorder.csproj -c Release
 ```
 
-Або через командний рядок Developer Command Prompt:
+Результат: `src/bin/Release/net46/SDRSharp.AudioRecorder.dll`
+
+### Крок 3 — Перевірити залежності (рекомендовано)
+
+У зібраному DLL **не повинно бути** жодної збірки з `Version=9.0.0.0` чи
+`System.IO.FileSystem.DriveInfo`. Перевірити можна через ILSpy, `monodis --assemblyref`
+або на Windows:
 
 ```cmd
-cd path\to\recorder-fenix\src
-msbuild SDRSharp.AudioRecorder.csproj /p:Configuration=Release
+dumpbin /dependents bin\Release\net46\SDRSharp.AudioRecorder.dll
 ```
 
-Результат: `src\bin\Release\SDRSharp.AudioRecorder.dll`
+`DriveInfo` має резолвитися з `mscorlib` (net46).
 
-### Крок 5 — Встановити плагін
+### Крок 4 — Встановити плагін
 
 1. Скопіюйте `SDRSharp.AudioRecorder.dll` в папку SDR#.
 2. Для SDR# **до v1800** — додайте в `Plugins.xml`:

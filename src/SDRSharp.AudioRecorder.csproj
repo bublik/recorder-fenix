@@ -1,28 +1,39 @@
-<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <AssemblyName>SDRSharp.AudioRecorder</AssemblyName>
     <GenerateAssemblyInfo>False</GenerateAssemblyInfo>
-    <UseWindowsForms>True</UseWindowsForms>
     <TargetFramework>net46</TargetFramework>
-  </PropertyGroup>
-  <PropertyGroup>
     <LangVersion>12.0</LangVersion>
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+    <!-- Чистий .NET Framework 4.6: не використовуємо WindowsDesktop SDK,
+         щоб у вихідний DLL не потрапляли .NET Core/9 збірки
+         (наприклад System.IO.FileSystem.DriveInfo 9.0.0.0). -->
   </PropertyGroup>
-  <PropertyGroup />
-  <ItemGroup />
   <ItemGroup>
+    <!-- Reference assemblies для net46 — дозволяють збірку на Linux/macOS -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net46" Version="1.0.3" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Системні збірки .NET Framework (беруться з reference assemblies, НЕ з Core) -->
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Xml" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Windows.Forms" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Залежності SDR# (покласти DLL у корінь репозиторію) -->
     <Reference Include="SDRSharp.Common">
       <HintPath>../SDRSharp.Common.dll</HintPath>
+      <Private>False</Private>
     </Reference>
     <Reference Include="SDRSharp.PluginsCom">
       <HintPath>../SDRSharp.PluginsCom.dll</HintPath>
+      <Private>False</Private>
     </Reference>
     <Reference Include="SDRSharp.Radio">
       <HintPath>../SDRSharp.Radio.dll</HintPath>
-    </Reference>
-    <Reference Include="System.Xml">
-      <HintPath>../../../.dotnet/shared/Microsoft.NETCore.App/8.0.28/System.Xml.dll</HintPath>
+      <Private>False</Private>
     </Reference>
   </ItemGroup>
 </Project>
