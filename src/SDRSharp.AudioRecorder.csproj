@@ -12,11 +12,15 @@
   <PropertyGroup />
   <ItemGroup />
   <ItemGroup>
-    <Reference Include="SDRSharp.Common" />
+    <Reference Include="SDRSharp.Common">
+      <HintPath>../SDRSharp.Common.dll</HintPath>
+    </Reference>
     <Reference Include="SDRSharp.PluginsCom">
       <HintPath>../SDRSharp.PluginsCom.dll</HintPath>
     </Reference>
-    <Reference Include="SDRSharp.Radio" />
+    <Reference Include="SDRSharp.Radio">
+      <HintPath>../SDRSharp.Radio.dll</HintPath>
+    </Reference>
     <Reference Include="System.Xml">
       <HintPath>../../../.dotnet/shared/Microsoft.NETCore.App/8.0.28/System.Xml.dll</HintPath>
     </Reference>
