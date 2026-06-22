@@ -143,7 +143,7 @@ public class SimpleWavWriter
 			{
 				_resampleBuffer = null;
 				_resampleBuffer = UnsafeBuffer.Create(num, 4);
-				_resampleBufferPtr = (float*)UnsafeBuffer.op_Implicit(_resampleBuffer);
+				_resampleBufferPtr = (float*)(void*)_resampleBuffer;
 			}
 			lengthOut = _resampler.Process(data, _resampleBufferPtr, length);
 			bufferOut = _resampleBufferPtr;
