@@ -1,0 +1,154 @@
+﻿name: Build and Release
+
+on:
+  push:
+    branches: [ master ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        fetch-tags: true
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '9.0.x'
+
+    - name: Restore dependencies
+      run: dotnet restore src/SDRSharp.AudioRecorder/SDRSharp.AudioRecorder.csproj
+
+    - name: Get version
+      id: get_version
+      shell: pwsh
+      run: |
+        $isMaster = $env:GITHUB_REF -eq 'refs/heads/master'
+        if ($env:GITHUB_REF -match 'refs/tags/v(.*)') {
+          $version = $matches[1]
+          $informationalVersion = $version
+        } else {
+          # Get highest semantic tag from repository or start with v0.0.0
+          $lastTag = git tag --list 'v*' --sort=-v:refname | Select-Object -First 1
+          if (-not $lastTag) {
+            $lastTag = "v0.0.0"
+          }
+          $lastTag = $lastTag -replace '^v', ''
+          
+          # Parse version
+          $parts = $lastTag -split '\.'
+          $major = if ($parts.Length -gt 0) { [int]$parts[0] } else { 0 }
+          $minor = if ($parts.Length -gt 1) { [int]$parts[1] } else { 0 }
+          $patch = if ($parts.Length -gt 2) { [int]$parts[2] } else { 0 }
+          
+          # Check commit message for version bump
+          $commitMsg = git log -1 --pretty=%B
+          if ($commitMsg -match '\[major\]|BREAKING CHANGE') {
+            $major++
+            $minor = 0
+            $patch = 0
+          } elseif ($commitMsg -match '\[minor\]|^feat:') {
+            $minor++
+            $patch = 0
+          } else {
+            $patch++
+          }
+          
+          $version = "$major.$minor.$patch"
+
+          $branchName = if ("${{ github.head_ref }}") { "${{ github.head_ref }}" } else { "${{ github.ref_name }}" }
+          if ($isMaster) {
+            $shortSha = "${{ github.sha }}".Substring(0, 7)
+            $informationalVersion = "$version+$shortSha"
+          } else {
+            $safeBranchName = $branchName -replace '[^a-zA-Z0-9-]', '-'
+            $buildNumber = "${{ github.run_number }}"
+            $informationalVersion = "$version+$safeBranchName.$buildNumber"
+          }
+        }
+        
+        echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+        echo "INFORMATIONAL_VERSION=$informationalVersion" >> $env:GITHUB_OUTPUT
+        echo "ASSEMBLY_VERSION=$version.0" >> $env:GITHUB_OUTPUT
+        echo "IS_MASTER=$isMaster" >> $env:GITHUB_OUTPUT
+        echo "Version: $version, InformationalVersion: $informationalVersion"
+
+    - name: Build
+      shell: pwsh
+      run: |
+        $args = @(
+          "src/SDRSharp.AudioRecorder/SDRSharp.AudioRecorder.csproj",
+          "--configuration", "Release",
+          "--no-restore",
+          "/p:Version=${{ steps.get_version.outputs.VERSION }}",
+          "/p:AssemblyVersion=${{ steps.get_version.outputs.ASSEMBLY_VERSION }}",
+          "/p:FileVersion=${{ steps.get_version.outputs.ASSEMBLY_VERSION }}",
+          "/p:InformationalVersion=${{ steps.get_version.outputs.INFORMATIONAL_VERSION }}"
+        )
+
+        if ("${{ steps.get_version.outputs.IS_MASTER }}" -eq "True") {
+          $args += "/p:DebugSymbols=false"
+          $args += "/p:DebugType=None"
+        }
+
+        dotnet build @args
+
+    - name: Package DLLs
+      shell: pwsh
+      run: |
+        $outputDir = "src/SDRSharp.AudioRecorder/bin/Release/net9.0-windows"
+        $packageDir = "SDRSharp.AudioRecorder-${{ steps.get_version.outputs.VERSION }}"
+
+        New-Item -ItemType Directory -Force -Path $packageDir | Out-Null
+
+        Copy-Item -Path "$outputDir/SDRSharp.AudioRecorder.dll" -Destination $packageDir -Force
+
+        if ("${{ steps.get_version.outputs.IS_MASTER }}" -ne "True" -and (Test-Path "$outputDir/SDRSharp.AudioRecorder.pdb")) {
+          Copy-Item -Path "$outputDir/SDRSharp.AudioRecorder.pdb" -Destination $packageDir -Force
+        }
+
+        Copy-Item -Path "SDRSharp.Common.dll" -Destination $packageDir -Force
+        Copy-Item -Path "SDRSharp.PluginsCom.dll" -Destination $packageDir -Force
+        Copy-Item -Path "SDRSharp.Radio.dll" -Destination $packageDir -Force
+
+        if (Test-Path "README.md") {
+          Copy-Item -Path "README.md" -Destination $packageDir -Force
+        }
+
+        if (Test-Path "changelog.txt") {
+          Copy-Item -Path "changelog.txt" -Destination $packageDir -Force
+        }
+
+        Compress-Archive -Path "$packageDir/*" -DestinationPath "SDRSharp.AudioRecorder-${{ steps.get_version.outputs.VERSION }}.zip" -Force
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: SDRSharp.AudioRecorder-${{ steps.get_version.outputs.VERSION }}
+        path: SDRSharp.AudioRecorder-${{ steps.get_version.outputs.VERSION }}.zip
+        retention-days: 90
+
+    - name: Create Release
+      if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: v${{ steps.get_version.outputs.VERSION }}
+        target_commitish: ${{ github.sha }}
+        name: v${{ steps.get_version.outputs.VERSION }}
+        files: SDRSharp.AudioRecorder-${{ steps.get_version.outputs.VERSION }}.zip
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

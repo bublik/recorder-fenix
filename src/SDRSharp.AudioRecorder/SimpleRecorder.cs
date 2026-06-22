@@ -361,10 +361,10 @@ public class SimpleRecorder : IDisposable
 					_buffer.Dispose();
 					_buffer = null;
 					_bufferPtr = null;
+					}
+					_buffer = UnsafeBuffer.Create(_audioBufferLength * 2, 4);
+					_bufferPtr = (float*)(void*)_buffer;
 				}
-				_buffer = UnsafeBuffer.Create(_audioBufferLength * 2, 4);
-				_bufferPtr = (float*)UnsafeBuffer.op_Implicit(_buffer);
-			}
 			_audioBuffer.Read(_bufferPtr, _audioBufferLength);
 			if (!_unityGain)
 			{

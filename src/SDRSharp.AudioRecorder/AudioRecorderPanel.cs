@@ -165,7 +165,7 @@ public class AudioRecorderPanel : UserControl
 		{
 			components.Dispose();
 		}
-		((ContainerControl)this).Dispose(disposing);
+		base.Dispose(disposing);
 	}
 
 	private void InitializeComponent()
