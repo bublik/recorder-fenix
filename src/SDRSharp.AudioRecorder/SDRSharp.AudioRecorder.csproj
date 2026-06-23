@@ -3,11 +3,18 @@
     <AssemblyName>SDRSharp.AudioRecorder</AssemblyName>
     <UseWindowsForms>True</UseWindowsForms>
     <TargetFramework>net9.0-windows</TargetFramework>
+    <Platforms>x86;x64</Platforms>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <AssemblyTitle>Audio Recorder Plug-in for SDR#</AssemblyTitle>
     <Company>Updated by thewraith2008</Company>
     <Product>Modified by thewraith2008 (Original by Ian Gilmour and TSSDR)</Product>
     <Copyright>Modified by thewraith2008 (Original by Ian Gilmour and TSSDR)</Copyright>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Platform)' == 'x86'">
+    <PlatformTarget>x86</PlatformTarget>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Platform)' == 'x64'">
+    <PlatformTarget>x64</PlatformTarget>
   </PropertyGroup>
   <PropertyGroup>
     <LangVersion>12.0</LangVersion>
