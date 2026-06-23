@@ -10,10 +10,14 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  version:
     runs-on: windows-latest
-    permissions:
-      contents: write
+
+    outputs:
+      VERSION: ${{ steps.get_version.outputs.VERSION }}
+      INFORMATIONAL_VERSION: ${{ steps.get_version.outputs.INFORMATIONAL_VERSION }}
+      ASSEMBLY_VERSION: ${{ steps.get_version.outputs.ASSEMBLY_VERSION }}
+      IS_MASTER: ${{ steps.get_version.outputs.IS_MASTER }}
 
     steps:
     - name: Checkout code
@@ -84,6 +88,26 @@ jobs:
         echo "IS_MASTER=$isMaster" >> $env:GITHUB_OUTPUT
         echo "Version: $version, InformationalVersion: $informationalVersion"
 
+  build:
+    runs-on: windows-latest
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [x86, x64]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '9.0.x'
+
+    - name: Restore dependencies
+      run: dotnet restore src/SDRSharp.AudioRecorder/SDRSharp.AudioRecorder.csproj
+
     - name: Build
       shell: pwsh
       run: |
@@ -91,13 +115,14 @@ jobs:
           "src/SDRSharp.AudioRecorder/SDRSharp.AudioRecorder.csproj",
           "--configuration", "Release",
           "--no-restore",
-          "/p:Version=${{ steps.get_version.outputs.VERSION }}",
-          "/p:AssemblyVersion=${{ steps.get_version.outputs.ASSEMBLY_VERSION }}",
-          "/p:FileVersion=${{ steps.get_version.outputs.ASSEMBLY_VERSION }}",
-          "/p:InformationalVersion=${{ steps.get_version.outputs.INFORMATIONAL_VERSION }}"
+          "/p:Platform=${{ matrix.platform }}",
+          "/p:Version=${{ needs.version.outputs.VERSION }}",
+          "/p:AssemblyVersion=${{ needs.version.outputs.ASSEMBLY_VERSION }}",
+          "/p:FileVersion=${{ needs.version.outputs.ASSEMBLY_VERSION }}",
+          "/p:InformationalVersion=${{ needs.version.outputs.INFORMATIONAL_VERSION }}"
         )
 
-        if ("${{ steps.get_version.outputs.IS_MASTER }}" -eq "True") {
+        if ("${{ needs.version.outputs.IS_MASTER }}" -eq "True") {
           $args += "/p:DebugSymbols=false"
           $args += "/p:DebugType=None"
         }
@@ -107,14 +132,14 @@ jobs:
     - name: Package DLLs
       shell: pwsh
       run: |
-        $outputDir = "src/SDRSharp.AudioRecorder/bin/Release/net9.0-windows"
-        $packageDir = "SDRSharp.AudioRecorder-${{ steps.get_version.outputs.VERSION }}"
+        $outputDir = "src/SDRSharp.AudioRecorder/bin/Release/net9.0-windows/${{ matrix.platform }}"
+        $packageDir = "SDRSharp.AudioRecorder-${{ needs.version.outputs.VERSION }}-${{ matrix.platform }}"
 
         New-Item -ItemType Directory -Force -Path $packageDir | Out-Null
 
         Copy-Item -Path "$outputDir/SDRSharp.AudioRecorder.dll" -Destination $packageDir -Force
 
-        if ("${{ steps.get_version.outputs.IS_MASTER }}" -ne "True" -and (Test-Path "$outputDir/SDRSharp.AudioRecorder.pdb")) {
+        if ("${{ needs.version.outputs.IS_MASTER }}" -ne "True" -and (Test-Path "$outputDir/SDRSharp.AudioRecorder.pdb")) {
           Copy-Item -Path "$outputDir/SDRSharp.AudioRecorder.pdb" -Destination $packageDir -Force
         }
 
@@ -130,23 +155,37 @@ jobs:
           Copy-Item -Path "changelog.txt" -Destination $packageDir -Force
         }
 
-        Compress-Archive -Path "$packageDir/*" -DestinationPath "SDRSharp.AudioRecorder-${{ steps.get_version.outputs.VERSION }}.zip" -Force
+        Compress-Archive -Path "$packageDir/*" -DestinationPath "SDRSharp.AudioRecorder-${{ needs.version.outputs.VERSION }}-${{ matrix.platform }}.zip" -Force
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: SDRSharp.AudioRecorder-${{ steps.get_version.outputs.VERSION }}
-        path: SDRSharp.AudioRecorder-${{ steps.get_version.outputs.VERSION }}.zip
+        name: SDRSharp.AudioRecorder-${{ needs.version.outputs.VERSION }}-${{ matrix.platform }}
+        path: SDRSharp.AudioRecorder-${{ needs.version.outputs.VERSION }}-${{ matrix.platform }}.zip
         retention-days: 90
 
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: windows-latest
+    needs: [version, build]
+    permissions:
+      contents: write
+
+    steps:
+    - name: Download build artifacts
+      uses: actions/download-artifact@v4
+      with:
+        pattern: SDRSharp.AudioRecorder-${{ needs.version.outputs.VERSION }}-*
+        path: release-assets
+        merge-multiple: true
+
     - name: Create Release
-      if: github.event_name == 'push' && github.ref == 'refs/heads/master'
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: v${{ steps.get_version.outputs.VERSION }}
+        tag_name: v${{ needs.version.outputs.VERSION }}
         target_commitish: ${{ github.sha }}
-        name: v${{ steps.get_version.outputs.VERSION }}
-        files: SDRSharp.AudioRecorder-${{ steps.get_version.outputs.VERSION }}.zip
+        name: v${{ needs.version.outputs.VERSION }}
+        files: release-assets/*.zip
         draft: false
         prerelease: false
         generate_release_notes: true
