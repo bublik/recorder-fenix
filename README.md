@@ -2,7 +2,8 @@
 
 Форк плагіна **Audio Recorder** для SDR# (by Vasili / thewraith).  
 Містить декомпільований вихідний код версії `1.3.10.0` з виправленими критичними помилками.
-Нова версія з фіксами 1.3.11.
+Версія `1.3.11.0` — фікси; версія `1.3.13.0` — додано режим **VOX** (гейтинг запису за рівнем
+аудіо), який працює для SSB (USB/LSB)/CW, де штатний squelch SDR# недоступний.
 
 ---
 
@@ -32,6 +33,35 @@
 | # | Файл | Проблема | Наслідки |
 |---|------|----------|----------|
 | 10 | `AudioRecorderPanel.cs` | `_fileIndexer` не скидався між сесіями | Лічильник конфліктних імен файлів ріс між сесіями |
+
+---
+
+## Що додано у v1.3.13.0 — режим VOX
+
+Штатний squelch SDR# амплітудно-шумовий і **вимкнений для SSB (USB/LSB) та CW**. Через це опція
+`Use squelch` у цих режимах фактично «завжди відкрита», і `Don't write pause` писав безперервно
+замість нарізки на окремі повідомлення.
+
+Додано **окремий режим VOX** — гейтинг за рівнем самого демодульованого аудіо, що працює для
+будь-якої модуляції (зокрема SSB/CW/AM):
+
+- `RecordingAudioProcessor` безперервно міряє пік аудіо в `Process()` (незалежно від стану
+  запису/паузи) і віддає його як `Decibels` (піко-холд зі скиданням при зчитуванні) / `LastDecibels`.
+- **Гістерезис** двома порогами: `open ≥ dB` відкриває гейт, `close < dB` — закриває.
+  Типові значення: open −30 dB, close −40 dB. Комбінується з hang-time `Continue recording`.
+- VOX — **окремий режим** і має пріоритет над squelch у `SignalIsActive()`; поки VOX активний,
+  чекбокси `squelch` і `mute` вимкнені.
+- Аудіопроцесор лишається ввімкненим, поки запис озброєно, тож VOX «бачить» початок передачі ще
+  до першого `RecordStart()` (і між файлами).
+- Нові налаштування: `AudioRecorder.UseAudioVox`, `AudioRecorder.VoxOpenDb`, `AudioRecorder.VoxCloseDb`.
+- Метадані в імені файлу (частота, тривалість) — без змін, за наявними правилами `FileName`.
+
+### Як користуватись
+
+1. **Configure → Recorder options** → увімкнути `Don't write pause` і `VOX — audio level (SSB/CW/AM)`.
+2. Виставити пороги (почати з open ≈ −30, close ≈ −40 dB), орієнтуючись на живий рівень `VOX dB`
+   у debug-рядку (подвійний клік по індикатору запису вмикає debug).
+3. `Record` — пишуться лише повідомлення, окремими файлами.
 
 ---
 
@@ -65,53 +95,53 @@ recorder-fenix/
 
 ## Як зібрати нову версію
 
-Плагін цілить у `.NET Framework 4.6`. Проєкт використовує SDK-стиль із пакетом
-`Microsoft.NETFramework.ReferenceAssemblies.net46`, тому збирається як на **Windows**,
-так і на **Linux/macOS** — потрібен лише .NET SDK (6.0+), без Visual Studio.
+Плагін цілить у **`net9.0-windows`** (`UseWindowsForms`), бо DLL сучасних збірок SDR#
+(rev 1921 у корені репозиторію) самі під **.NET 9**. Старіші ревізії README згадували
+`.NET Framework 4.6` — це **застаріло**: проти net9-збірок SDR# плагін має бути теж net9,
+інакше отримаєте `CS1705 ... uses System.Runtime Version=9.0.0.0 which has a higher version`.
 
-> ⚠️ **Важливо:** проєкт навмисно НЕ використовує `Microsoft.NET.Sdk.WindowsDesktop`
-> і `UseWindowsForms`. Цей SDK на не-Windows (а також у деяких конфігураціях) підставляє
-> у вихідний DLL збірки з **.NET Core / .NET 9** (наприклад `System.IO.FileSystem.DriveInfo
-> v9.0.0.0`). SDR# працює на .NET Framework, де таких збірок немає, і плагін падає з
-> `Could not load file or assembly ... Version=9.0.0.0`. Не повертайте WindowsDesktop SDK.
+> ℹ️ **Збірка на Linux/macOS** працює, але потрібен прапор `-p:EnableWindowsTargeting=true`
+> (на не-Windows таргет `*-windows` інакше не резолвиться). На **Windows** прапор не потрібен.
 
 ### Вимоги
 
-- **.NET SDK 6.0 або новіший** ([dotnet.microsoft.com/download](https://dotnet.microsoft.com/download))
+- **.NET SDK 9.0 або новіший** ([dotnet.microsoft.com/download](https://dotnet.microsoft.com/download))
   — на Windows підійде Visual Studio 2022 з компонентом `.NET desktop development`.
+  (SDK 8.0 НЕ підійде — не вміє таргетити `net9.0`.)
 - **SDR#** — потрібні три DLL: `SDRSharp.Common.dll`, `SDRSharp.Radio.dll`,
   `SDRSharp.PluginsCom.dll`. Вони вже лежать у корені репозиторію (rev 1921);
-  за потреби замініть їх на DLL зі своєї версії SDR#.
+  за потреби замініть їх на DLL зі своєї версії SDR# (і, якщо вона старіша/інша за .NET,
+  узгодьте `TargetFramework` у `.csproj`).
 
 ### Крок 1 — Очистити старі артефакти
 
 Якщо раніше збирали зі старим csproj — приберіть кеш:
 
 ```bash
-cd src
+cd src/SDRSharp.AudioRecorder
 rm -rf obj bin          # Windows: rmdir /s /q obj bin
 ```
 
 ### Крок 2 — Зібрати
 
 ```bash
-cd src
+cd src/SDRSharp.AudioRecorder
+
+# Windows:
 dotnet build SDRSharp.AudioRecorder.csproj -c Release
+
+# Linux/macOS (потрібен прапор крос-таргетингу):
+dotnet build SDRSharp.AudioRecorder.csproj -c Release -p:EnableWindowsTargeting=true
 ```
 
-Результат: `src/bin/Release/net46/SDRSharp.AudioRecorder.dll`
+Результат: `src/SDRSharp.AudioRecorder/bin/Release/net9.0-windows/SDRSharp.AudioRecorder.dll`
 
-### Крок 3 — Перевірити залежності (рекомендовано)
+### Крок 3 — Перевірити збірку
 
-У зібраному DLL **не повинно бути** жодної збірки з `Version=9.0.0.0` чи
-`System.IO.FileSystem.DriveInfo`. Перевірити можна через ILSpy, `monodis --assemblyref`
-або на Windows:
-
-```cmd
-dumpbin /dependents bin\Release\net46\SDRSharp.AudioRecorder.dll
-```
-
-`DriveInfo` має резолвитися з `mscorlib` (net46).
+Очікувано **`0 Warning(s), 0 Error(s)`**. Якщо бачите `NETSDK1045 ... does not support
+targeting .NET 9.0` — встановлено застарілий SDK (8.0 чи нижче), потрібен **.NET SDK 9.0+**.
+Якщо `CS1705 ... System.Runtime Version=9.0.0.0 higher version` — таргет проєкту не збігається
+з .NET-версією DLL SDR#; узгодьте `TargetFramework` у `.csproj`.
 
 ### Крок 4 — Встановити плагін
 

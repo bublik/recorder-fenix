@@ -73,6 +73,18 @@ public class DialogConfigure : Form
 
 	private CheckBox useSquelchCheckBox;
 
+	private CheckBox useAudioVoxCheckBox;
+
+	private NumericUpDown voxOpenNumericUpDown;
+
+	private NumericUpDown voxCloseNumericUpDown;
+
+	private Label voxOpenLabel;
+
+	private Label voxCloseLabel;
+
+	private ToolTip toolTip1;
+
 	private Label pluginVersionLabel;
 
 	private Label label9;
@@ -101,6 +113,9 @@ public class DialogConfigure : Form
 		dontWritePauseCheckBox.Checked = _recorder.DontWritePause;
 		useSquelchCheckBox.Checked = _recorder.UseSquelch;
 		useMuteCheckBox.Checked = _recorder.UseMute;
+		useAudioVoxCheckBox.Checked = _recorder.UseAudioVox;
+		voxOpenNumericUpDown.Value = ClampVoxDb(_recorder.VoxOpenDb);
+		voxCloseNumericUpDown.Value = ClampVoxDb(_recorder.VoxCloseDb);
 		continueRecordEnableCheckBox.Checked = _recorder.ContinueRecordTimeEnable;
 		continueRecordTimeNumericUpDown.Value = _recorder.ContinueRecordTime / 1000;
 		newFileTimeEnableCheckBox.Checked = _recorder.NewFileTimeEnable;
@@ -114,6 +129,20 @@ public class DialogConfigure : Form
 		((Control)folderTextBox).Text = _recorder.FileNameRules;
 		folderTextBox_TextChanged(null, null);
 		((Control)pluginVersionLabel).Text = _recorder.PluginVersion;
+	}
+
+	// Обмежує значення порога VOX діапазоном NumericUpDown [-90 .. 0] dB.
+	private decimal ClampVoxDb(double db)
+	{
+		if (db < -90.0)
+		{
+			db = -90.0;
+		}
+		if (db > 0.0)
+		{
+			db = 0.0;
+		}
+		return (decimal)db;
 	}
 
 	private void AddSamplerate(string outputSamplerate)
@@ -154,6 +183,9 @@ public class DialogConfigure : Form
 		_recorder.WriteOneFile = writeOneFileCheckBox.Checked;
 		_recorder.UseMute = useMuteCheckBox.Checked;
 		_recorder.UseSquelch = useSquelchCheckBox.Checked;
+		_recorder.UseAudioVox = useAudioVoxCheckBox.Checked;
+		_recorder.VoxOpenDb = (double)voxOpenNumericUpDown.Value;
+		_recorder.VoxCloseDb = (double)voxCloseNumericUpDown.Value;
 		_recorder.ContinueRecordTimeEnable = continueRecordEnableCheckBox.Checked;
 		_recorder.ContinueRecordTime = (int)continueRecordTimeNumericUpDown.Value * 1000;
 		_recorder.NewFileTimeEnable = newFileTimeEnableCheckBox.Checked;
@@ -180,8 +212,13 @@ public class DialogConfigure : Form
 	{
 		((Control)continueRecordEnableCheckBox).Enabled = dontWritePauseCheckBox.Checked;
 		((Control)continueRecordTimeNumericUpDown).Enabled = dontWritePauseCheckBox.Checked;
-		((Control)useMuteCheckBox).Enabled = dontWritePauseCheckBox.Checked;
-		((Control)useSquelchCheckBox).Enabled = dontWritePauseCheckBox.Checked;
+		((Control)useMuteCheckBox).Enabled = dontWritePauseCheckBox.Checked && !useAudioVoxCheckBox.Checked;
+		((Control)useSquelchCheckBox).Enabled = dontWritePauseCheckBox.Checked && !useAudioVoxCheckBox.Checked;
+		((Control)useAudioVoxCheckBox).Enabled = dontWritePauseCheckBox.Checked;
+		((Control)voxOpenNumericUpDown).Enabled = dontWritePauseCheckBox.Checked && useAudioVoxCheckBox.Checked;
+		((Control)voxCloseNumericUpDown).Enabled = dontWritePauseCheckBox.Checked && useAudioVoxCheckBox.Checked;
+		((Control)voxOpenLabel).Enabled = dontWritePauseCheckBox.Checked && useAudioVoxCheckBox.Checked;
+		((Control)voxCloseLabel).Enabled = dontWritePauseCheckBox.Checked && useAudioVoxCheckBox.Checked;
 		((Control)newFileTimeEnableCheckBox).Enabled = !writeOneFileCheckBox.Checked;
 		((Control)NewFileTimeNumericUpDown).Enabled = !writeOneFileCheckBox.Checked;
 		((Control)createFileIfFrequencyCheckBox).Enabled = !writeOneFileCheckBox.Checked;
@@ -302,6 +339,12 @@ public class DialogConfigure : Form
 		label3 = new Label();
 		useMuteCheckBox = new CheckBox();
 		useSquelchCheckBox = new CheckBox();
+		useAudioVoxCheckBox = new CheckBox();
+		voxOpenNumericUpDown = new NumericUpDown();
+		voxCloseNumericUpDown = new NumericUpDown();
+		voxOpenLabel = new Label();
+		voxCloseLabel = new Label();
+		toolTip1 = new ToolTip(components);
 		autoStartCheckBox = new CheckBox();
 		NewFileTimeNumericUpDown = new NumericUpDown();
 		createFileIfFrequencyCheckBox = new CheckBox();
@@ -319,6 +362,8 @@ public class DialogConfigure : Form
 		((Control)recorderTabPage).SuspendLayout();
 		((ISupportInitialize)NewFileTimeNumericUpDown).BeginInit();
 		((ISupportInitialize)continueRecordTimeNumericUpDown).BeginInit();
+		((ISupportInitialize)voxOpenNumericUpDown).BeginInit();
+		((ISupportInitialize)voxCloseNumericUpDown).BeginInit();
 		((Control)this).SuspendLayout();
 		((Control)btnOk).Anchor = (AnchorStyles)9;
 		btnOk.DialogResult = (DialogResult)1;
@@ -466,6 +511,11 @@ public class DialogConfigure : Form
 		((Control)recorderTabPage).Controls.Add((Control)(object)label3);
 		((Control)recorderTabPage).Controls.Add((Control)(object)useMuteCheckBox);
 		((Control)recorderTabPage).Controls.Add((Control)(object)useSquelchCheckBox);
+		((Control)recorderTabPage).Controls.Add((Control)(object)useAudioVoxCheckBox);
+		((Control)recorderTabPage).Controls.Add((Control)(object)voxOpenNumericUpDown);
+		((Control)recorderTabPage).Controls.Add((Control)(object)voxCloseNumericUpDown);
+		((Control)recorderTabPage).Controls.Add((Control)(object)voxOpenLabel);
+		((Control)recorderTabPage).Controls.Add((Control)(object)voxCloseLabel);
 		((Control)recorderTabPage).Controls.Add((Control)(object)autoStartCheckBox);
 		((Control)recorderTabPage).Controls.Add((Control)(object)NewFileTimeNumericUpDown);
 		((Control)recorderTabPage).Controls.Add((Control)(object)createFileIfFrequencyCheckBox);
@@ -524,6 +574,39 @@ public class DialogConfigure : Form
 		((Control)useSquelchCheckBox).TabIndex = 49;
 		((Control)useSquelchCheckBox).Text = "squelch";
 		((ButtonBase)useSquelchCheckBox).UseVisualStyleBackColor = true;
+		((Control)useAudioVoxCheckBox).AutoSize = true;
+		((Control)useAudioVoxCheckBox).Location = new Point(6, 169);
+		((Control)useAudioVoxCheckBox).Name = "useAudioVoxCheckBox";
+		((Control)useAudioVoxCheckBox).Size = new Size(200, 17);
+		((Control)useAudioVoxCheckBox).TabIndex = 57;
+		((Control)useAudioVoxCheckBox).Text = "VOX — audio level (SSB/CW/AM)";
+		((ButtonBase)useAudioVoxCheckBox).UseVisualStyleBackColor = true;
+		((Control)voxOpenLabel).AutoSize = true;
+		((Control)voxOpenLabel).Location = new Point(213, 171);
+		((Control)voxOpenLabel).Name = "voxOpenLabel";
+		((Control)voxOpenLabel).Size = new Size(55, 13);
+		((Control)voxOpenLabel).TabIndex = 58;
+		((Control)voxOpenLabel).Text = "open ≥ dB";
+		((Control)voxOpenNumericUpDown).Location = new Point(272, 167);
+		voxOpenNumericUpDown.Minimum = new decimal(-90);
+		voxOpenNumericUpDown.Maximum = new decimal(0);
+		((Control)voxOpenNumericUpDown).Name = "voxOpenNumericUpDown";
+		((Control)voxOpenNumericUpDown).Size = new Size(48, 20);
+		((Control)voxOpenNumericUpDown).TabIndex = 59;
+		((Control)voxCloseLabel).AutoSize = true;
+		((Control)voxCloseLabel).Location = new Point(326, 171);
+		((Control)voxCloseLabel).Name = "voxCloseLabel";
+		((Control)voxCloseLabel).Size = new Size(58, 13);
+		((Control)voxCloseLabel).TabIndex = 60;
+		((Control)voxCloseLabel).Text = "close < dB";
+		((Control)voxCloseNumericUpDown).Location = new Point(388, 167);
+		voxCloseNumericUpDown.Minimum = new decimal(-90);
+		voxCloseNumericUpDown.Maximum = new decimal(0);
+		((Control)voxCloseNumericUpDown).Name = "voxCloseNumericUpDown";
+		((Control)voxCloseNumericUpDown).Size = new Size(48, 20);
+		((Control)voxCloseNumericUpDown).TabIndex = 61;
+		toolTip1.SetToolTip((Control)(object)useSquelchCheckBox, "Штатний squelch SDR# не діє для SSB (USB/LSB) та CW — у цих режимах вмикайте VOX.");
+		toolTip1.SetToolTip((Control)(object)useAudioVoxCheckBox, "Гейтинг запису за рівнем демодульованого аудіо. Працює для будь-якої модуляції. Окремий режим — має пріоритет над squelch. open/close дають гістерезис.");
 		((Control)autoStartCheckBox).AutoSize = true;
 		((Control)autoStartCheckBox).Location = new Point(6, 6);
 		((Control)autoStartCheckBox).Name = "autoStartCheckBox";
@@ -609,6 +692,8 @@ public class DialogConfigure : Form
 		((Control)recorderTabPage).PerformLayout();
 		((ISupportInitialize)NewFileTimeNumericUpDown).EndInit();
 		((ISupportInitialize)continueRecordTimeNumericUpDown).EndInit();
+		((ISupportInitialize)voxOpenNumericUpDown).EndInit();
+		((ISupportInitialize)voxCloseNumericUpDown).EndInit();
 		((Control)this).ResumeLayout(false);
 		((Control)this).PerformLayout();
 	}

@@ -101,6 +101,11 @@ public class AudioRecorderPanel : UserControl
 
 	private bool _debugEnable;
 
+	// Поточний стан VOX-гейта (з гістерезисом) і останній виміряний рівень у dB.
+	private bool _voxOpen;
+
+	private double _voxLevelDb = -100.0;
+
 	private bool _comCmdError;
 
 	private bool _simpleRecorderError;
@@ -156,6 +161,17 @@ public class AudioRecorderPanel : UserControl
 	public bool UseSquelch { get; set; }
 
 	public bool UseMute { get; set; }
+
+	// VOX — окремий режим гейтингу по рівню демодульованого аудіо.
+	// Працює для будь-якої модуляції (зокрема SSB/CW), на відміну від UseSquelch,
+	// який спирається на штатний squelch SDR#, недоступний у SSB/CW.
+	public bool UseAudioVox { get; set; }
+
+	// Поріг відкриття VOX (dB). Сигнал вважається активним, коли рівень >= цього значення.
+	public double VoxOpenDb { get; set; }
+
+	// Поріг закриття VOX (dB). Зазвичай нижчий за VoxOpenDb — це і дає гістерезис.
+	public double VoxCloseDb { get; set; }
 
 	public string PluginVersion => "Audio Recorder - v" + ((Control)this).ProductVersion;
 
@@ -373,6 +389,9 @@ public class AudioRecorderPanel : UserControl
 		DontWritePause = Utils.GetBooleanSetting("AudioRecorder.DontWritePause");
 		UseMute = Utils.GetBooleanSetting("AudioRecorder.UseMute");
 		UseSquelch = Utils.GetBooleanSetting("AudioRecorder.UseSquelch");
+		UseAudioVox = Utils.GetBooleanSetting("AudioRecorder.UseAudioVox");
+		VoxOpenDb = Utils.GetDoubleSetting("AudioRecorder.VoxOpenDb", -30.0);
+		VoxCloseDb = Utils.GetDoubleSetting("AudioRecorder.VoxCloseDb", -40.0);
 		writeFolderBrowserDialog.SelectedPath = Utils.GetStringSetting("AudioRecorder.WriteFolder", Path.GetDirectoryName(Application.ExecutablePath));
 		SamplerateOut = Utils.GetIntSetting("AudioRecorder.WriteSamplerate", 0);
 		MinWriteLength = (float)Utils.GetDoubleSetting("AudioRecorder.MinimumWriteLengthInSecond", 0.0);
@@ -404,6 +423,9 @@ public class AudioRecorderPanel : UserControl
 		Utils.SaveSetting("AudioRecorder.DontWritePause", (object)DontWritePause);
 		Utils.SaveSetting("AudioRecorder.UseMute", (object)UseMute);
 		Utils.SaveSetting("AudioRecorder.UseSquelch", (object)UseSquelch);
+		Utils.SaveSetting("AudioRecorder.UseAudioVox", (object)UseAudioVox);
+		Utils.SaveSetting("AudioRecorder.VoxOpenDb", (object)VoxOpenDb);
+		Utils.SaveSetting("AudioRecorder.VoxCloseDb", (object)VoxCloseDb);
 		Utils.SaveSetting("AudioRecorder.WriteFolder", writeFolderBrowserDialog.SelectedPath);
 		Utils.SaveSetting("AudioRecorder.WriteSamplerate", (object)SamplerateOut);
 		Utils.SaveSetting("AudioRecorder.RecordSampleFormat", (object)SampleFormatSelectedIndex);
@@ -845,7 +867,13 @@ public class AudioRecorderPanel : UserControl
 	private bool SignalIsActive()
 	{
 		bool flag = true;
-		if (UseSquelch)
+		if (UseAudioVox)
+		{
+			// VOX — окремий режим: ігнорує штатний squelch SDR#.
+			// Стан _voxOpen оновлюється раз на тік у UpdateVox().
+			flag = _voxOpen;
+		}
+		else if (UseSquelch)
 		{
 			flag = _control.IsSquelchOpen || !_control.SquelchEnabled;
 		}
@@ -854,6 +882,25 @@ public class AudioRecorderPanel : UserControl
 			flag &= !_control.AudioIsMuted;
 		}
 		return flag;
+	}
+
+	// Оновлює стан VOX-гейта з гістерезисом. Викликати рівно один раз на тік таймера,
+	// бо зчитування _audioProcessor.Decibels скидає накопичувач піку.
+	private void UpdateVox()
+	{
+		double num = _audioProcessor.Decibels;
+		_voxLevelDb = num;
+		if (_voxOpen)
+		{
+			if (num < VoxCloseDb)
+			{
+				_voxOpen = false;
+			}
+		}
+		else if (num >= VoxOpenDb)
+		{
+			_voxOpen = true;
+		}
 	}
 
 	private void RecordLabel(string text, Color color)
@@ -1026,6 +1073,12 @@ public class AudioRecorderPanel : UserControl
 			_filesCounter = 0;
 			_writeAllSecond = 0f;
 			_fileIndexer = 0;
+			_voxOpen = false;
+			if (UseAudioVox)
+			{
+				// Вмикаємо вимір рівня одразу при озброєнні, ще до першого спрацювання VOX.
+				_audioProcessor.Enabled = true;
+			}
 			RecordLabel("Create new file", _foreColor);
 		}
 		else
@@ -1037,6 +1090,12 @@ public class AudioRecorderPanel : UserControl
 			{
 				RecordStop();
 			}
+			else
+			{
+				// Озброєні без запису (VOX чекав сигнал) — глушимо процесор вручну.
+				_audioProcessor.Enabled = false;
+			}
+			_voxOpen = false;
 			((Control)recordLabel).Visible = false;
 		}
 		ConfigureGUI();
@@ -1294,6 +1353,17 @@ public class AudioRecorderPanel : UserControl
 			MessageBox.Show("AudioRecorder: You do not have enough HDD space to continue recording", "ALERT", (MessageBoxButtons)0);
 			return;
 		}
+		if (UseAudioVox)
+		{
+			// Тримаємо аудіопроцесор увімкненим, поки озброєні, щоб рівень мірявся
+			// до старту запису й між файлами — інакше VOX не «побачив» би сигнал
+			// (процесор інакше вмикається лише під час запису).
+			if (!_simpleRecorder.IsRecording)
+			{
+				_audioProcessor.Enabled = true;
+			}
+			UpdateVox();
+		}
 		if (MaxFileSizeEnable && (double)_simpleRecorder.BytesWritten * 9.5367431640625E-07 >= (double)MaxWriteLength)
 		{
 			RecordStop();
@@ -1404,7 +1474,7 @@ public class AudioRecorderPanel : UserControl
 		((Control)label3).Visible = _debugEnable;
 		if (_debugEnable)
 		{
-			((Control)label3).Text = "REC SR: " + num4 + " - REC level dB: " + _simpleRecorder.Decibels.ToString("#");
+			((Control)label3).Text = "REC SR: " + num4 + " - REC level dB: " + _simpleRecorder.Decibels.ToString("#") + (UseAudioVox ? (" - VOX dB: " + _voxLevelDb.ToString("0") + (_voxOpen ? " [open]" : " [closed]")) : "");
 		}
 	}
 
