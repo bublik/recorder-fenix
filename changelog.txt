@@ -20,6 +20,32 @@ NOTE: While I have been trying to maintain backwards compatibility with older SD
 
 =====================================================================================================
 
+1.3.13.0 - Release                                                                        30th June 2026
+
+Added: VOX recording mode (audio-level squelch with hysteresis) (RecordingAudioProcessor / AudioRecorderPanel / DialogConfigure)
+- SDR#'s built-in squelch is amplitude/carrier based and is disabled for SSB (USB/LSB) and CW.
+  In those modes the existing "Use squelch" trigger degraded to always-open, so "Don't write pause"
+  recorded continuously instead of gating per transmission.
+- A new independent VOX mode gates recording on the level of the demodulated audio itself, which
+  works for any modulation (incl. SSB/CW/AM).
+  - RecordingAudioProcessor now measures a continuous audio peak in Process() and exposes it as
+    Decibels (peak-hold, reset on read) / LastDecibels. This is independent of the record/pause
+    state, so the level is available before recording starts and between files.
+  - Two thresholds give hysteresis: "open >= dB" opens the gate, "close < dB" closes it.
+    Defaults: open -30 dB, close -40 dB. Combine with "Continue recording" hang-time as before.
+  - VOX is a SEPARATE mode and takes priority over squelch in SignalIsActive(); the squelch and
+    mute checkboxes are disabled while VOX is active.
+  - The audio processor is kept enabled while armed so VOX can detect the start of a transmission
+    even before the first RecordStart() (and after file splits).
+  - New settings: AudioRecorder.UseAudioVox, AudioRecorder.VoxOpenDb, AudioRecorder.VoxCloseDb.
+  - UI: "VOX - audio level (SSB/CW/AM)" checkbox plus open/close dB fields on the Recorder options
+    tab; a tooltip on the squelch checkbox notes it does not work for SSB/CW.
+  - The debug line (double-click the REC label) now also shows the live VOX dB and [open]/[closed].
+- File naming is unchanged: frequency and duration remain in the file name per the existing
+  FileName rules.
+
+=====================================================================================================
+
 1.3.11.0 - Release                                                                        19th June 2026
 
 Fixed: Race conditions in DiskWriterThread (SimpleRecorder)

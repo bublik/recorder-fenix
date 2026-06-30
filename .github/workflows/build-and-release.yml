@@ -37,56 +37,54 @@ jobs:
     - name: Get version
       id: get_version
       shell: pwsh
+      env:
+        # Pass untrusted/ref inputs via env (not ${{ }} inlining) to avoid script injection.
+        HEAD_REF: ${{ github.head_ref }}
+        REF_NAME: ${{ github.ref_name }}
+        COMMIT_SHA: ${{ github.sha }}
+        RUN_NUMBER: ${{ github.run_number }}
       run: |
         $isMaster = $env:GITHUB_REF -eq 'refs/heads/master'
+
+        # Single source of truth: <Version> in the .csproj.
+        # A tag push (refs/tags/v*) may override it for ad-hoc releases.
+        $csproj = "src/SDRSharp.AudioRecorder/SDRSharp.AudioRecorder.csproj"
+        $csprojMatch = Select-String -Path $csproj -Pattern '<Version>\s*(.*?)\s*</Version>' | Select-Object -First 1
+        if (-not $csprojMatch) {
+          Write-Error "No <Version> element found in $csproj"
+          exit 1
+        }
+        $csprojVersion = $csprojMatch.Matches[0].Groups[1].Value
+
         if ($env:GITHUB_REF -match 'refs/tags/v(.*)') {
           $version = $matches[1]
-          $informationalVersion = $version
         } else {
-          # Get highest semantic tag from repository or start with v0.0.0
-          $lastTag = git tag --list 'v*' --sort=-v:refname | Select-Object -First 1
-          if (-not $lastTag) {
-            $lastTag = "v0.0.0"
-          }
-          $lastTag = $lastTag -replace '^v', ''
-          
-          # Parse version
-          $parts = $lastTag -split '\.'
-          $major = if ($parts.Length -gt 0) { [int]$parts[0] } else { 0 }
-          $minor = if ($parts.Length -gt 1) { [int]$parts[1] } else { 0 }
-          $patch = if ($parts.Length -gt 2) { [int]$parts[2] } else { 0 }
-          
-          # Check commit message for version bump
-          $commitMsg = git log -1 --pretty=%B
-          if ($commitMsg -match '\[major\]|BREAKING CHANGE') {
-            $major++
-            $minor = 0
-            $patch = 0
-          } elseif ($commitMsg -match '\[minor\]|^feat:') {
-            $minor++
-            $patch = 0
-          } else {
-            $patch++
-          }
-          
-          $version = "$major.$minor.$patch"
-
-          $branchName = if ("${{ github.head_ref }}") { "${{ github.head_ref }}" } else { "${{ github.ref_name }}" }
-          if ($isMaster) {
-            $shortSha = "${{ github.sha }}".Substring(0, 7)
-            $informationalVersion = "$version+$shortSha"
-          } else {
-            $safeBranchName = $branchName -replace '[^a-zA-Z0-9-]', '-'
-            $buildNumber = "${{ github.run_number }}"
-            $informationalVersion = "$version+$safeBranchName.$buildNumber"
-          }
+          $version = $csprojVersion
         }
-        
+
+        # Assembly version is always a normalized 4-part major.minor.patch.0,
+        # regardless of whether $version is 3- or 4-part.
+        $coreParts = ($version -split '\.')
+        $major = if ($coreParts.Length -gt 0) { [int]$coreParts[0] } else { 0 }
+        $minor = if ($coreParts.Length -gt 1) { [int]$coreParts[1] } else { 0 }
+        $patch = if ($coreParts.Length -gt 2) { [int]$coreParts[2] } else { 0 }
+        $assemblyVersion = "$major.$minor.$patch.0"
+
+        # InformationalVersion carries build metadata (sha / branch + run number).
+        if ($isMaster) {
+          $shortSha = "$env:COMMIT_SHA".Substring(0, 7)
+          $informationalVersion = "$version+$shortSha"
+        } else {
+          $branchName = if ($env:HEAD_REF) { $env:HEAD_REF } else { $env:REF_NAME }
+          $safeBranchName = $branchName -replace '[^a-zA-Z0-9-]', '-'
+          $informationalVersion = "$version+$safeBranchName.$env:RUN_NUMBER"
+        }
+
         echo "VERSION=$version" >> $env:GITHUB_OUTPUT
         echo "INFORMATIONAL_VERSION=$informationalVersion" >> $env:GITHUB_OUTPUT
-        echo "ASSEMBLY_VERSION=$version.0" >> $env:GITHUB_OUTPUT
+        echo "ASSEMBLY_VERSION=$assemblyVersion" >> $env:GITHUB_OUTPUT
         echo "IS_MASTER=$isMaster" >> $env:GITHUB_OUTPUT
-        echo "Version: $version, InformationalVersion: $informationalVersion"
+        echo "Version (from $(if ($env:GITHUB_REF -match 'refs/tags/') { 'tag' } else { 'csproj' })): $version, Assembly: $assemblyVersion, Informational: $informationalVersion"
 
   build:
     runs-on: windows-latest
