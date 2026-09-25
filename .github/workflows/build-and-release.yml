@@ -146,9 +146,8 @@ jobs:
           Copy-Item -Path (Join-Path $outputDir "SDRSharp.AudioRecorder.pdb") -Destination $packageDir -Force
         }
 
-        Copy-Item -Path "SDRSharp.Common.dll" -Destination $packageDir -Force
-        Copy-Item -Path "SDRSharp.PluginsCom.dll" -Destination $packageDir -Force
-        Copy-Item -Path "SDRSharp.Radio.dll" -Destination $packageDir -Force
+        # SDRSharp.Common/Radio/PluginsCom.dll are NOT shipped: the host (net8 or net9)
+        # provides its own, and duplicates in Plugins\ fail with "Assembly with same name is already loaded".
 
         if (Test-Path "README.md") {
           Copy-Item -Path "README.md" -Destination $packageDir -Force
