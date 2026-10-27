@@ -240,7 +240,7 @@ def img_file_tab():
 # Макет 3: панель плагіна в SDR# (розширена бокова панель)
 # ---------------------------------------------------------------------------
 def img_panel(name, state, callouts=True):
-    base_w, W, H = 217, 380, 172
+    base_w, W, H = 217, 300, 184
     dx = W - base_w  # контроли з Anchor=Right зсуваються, з Left|Right — розтягуються
     c = Canvas(W, H, pad_l=36, pad_r=40, pad_t=12, pad_b=12)
     c.rect(0, 0, W, H, fill=(240, 240, 240), outline=(150, 150, 150))
@@ -255,14 +255,17 @@ def img_panel(name, state, callouts=True):
     c.text(111 + dx, 101, state["label"], fill=state["label_color"])
     c.button(12, 125, 93, 23, "Configure")
     c.button(111 + dx, 125, 93, 23, "Stop")
-    dbg = "REC SR: 48000 - REC level dB: {0} - VOX dB: {0} [{1}]".format(state["db"], state["gate"])
-    c.text(33, 152, dbg)
+    # Debug-рядок: два рядки, розтягується з панеллю (AudioRecorderPanel.label3)
+    dbg1 = "REC SR: 48000 - REC level dB: {0}".format(state["db"])
+    dbg2 = "VOX dB: {0} [{1}]".format(state["db"], state["gate"])
+    c.text(6, 151, dbg1)
+    c.text(6, 164, dbg2)
     if callouts:
         c.callout(1, 12, 125, 93, 23, -18, 136)
         c.callout(2, 111 + dx, 125, 93, 23, W + 20, 136)
         c.callout(3, 111 + dx, 99, c.d.textlength(state["label"], font=UI) / S + 2, 17, W + 20, 108)
-        tw = c.d.textlength(dbg, font=UI) / S
-        c.callout(4, 33, 151, tw + 2, 15, -18, 159)
+        tw = c.d.textlength(dbg2, font=UI) / S
+        c.callout(4, 6, 164, tw + 2, 14, -18, 171)
     return c.save(name)
 
 
@@ -422,7 +425,7 @@ def build_pdf(imgs):
     s = []
     # --- сторінка 1: суть ---
     s += [Paragraph("Запис без шуму: налаштування VOX", h1),
-          Paragraph("Audio Recorder для SDR# · версія 1.3.13.0 · для операторів", sub),
+          Paragraph("Audio Recorder для SDR# · версія 1.3.13.0 і новіші · для операторів", sub),
           Spacer(1, 8)]
     s.append(box(Paragraph(
         "<b>Чому пишеться шум?</b> VOX вмикає запис, коли звук голосніший за поріг <b>open</b>. "
@@ -456,7 +459,8 @@ def build_pdf(imgs):
         ("1", "Вкладка <b>Recorder options</b>."),
         ("2", "☑ <b>Don't write pause</b> — без цієї галочки VOX не працює (пишеться все підряд)."),
         ("3", "☑ <b>VOX — audio level (SSB/CW/AM)</b>. Галочки <i>squelch</i> і <i>mute</i> стануть сірими — так і має бути."),
-        ("4", "Пороги <b>open ≥ dB</b> і <b>close &lt; dB</b>. Цифри на картинці — лише приклад, свої виставите на кроці 3."),
+        ("4", "Пороги <b>open ≥ dB</b> і <b>close &lt; dB</b>. Цифри на картинці — лише приклад, свої виставите на кроці 3. "
+              "Якщо close буде вищим за open, вікно попередить і не закриється."),
         ("5", "☑ <b>Continue recording … for</b> = <b>1–3 с</b>. Хвіст, щоб не різало паузи між словами. "
               "Працює і для VOX, хоча в назві написано «squelch». Не ставте 10+ с — буде довгий шумовий хвіст."),
         ("6", "☑ <b>Waiting time to create a new file after</b> = <b>5–10 с</b> — кожна передача в окремому файлі."),
@@ -473,12 +477,12 @@ def build_pdf(imgs):
         ("2", "<b>Record</b> — почати чергування (кнопка стане <b>Stop</b>)."),
         ("3", "<b>Двічі клацніть по цьому напису</b> (Pause / Record / Create new file) — з'явиться рядок налагодження. "
               "Повторний подвійний клік ховає його."),
-        ("4", "Рядок з <b>VOX dB</b> і станом <b>[closed]</b> / <b>[open]</b>. Число оновлюється кілька разів на секунду."),
+        ("4", "Другий рядок — <b>VOX dB</b> і стан <b>[closed]</b> / <b>[open]</b>. Число оновлюється кілька разів на секунду."),
     ]))
     s.append(Spacer(1, 6))
     s.append(box(Paragraph(
-        "<b>Не видно «VOX dB»?</b> Рядок довгий і обрізається на вузькій панелі. "
-        "<b>Розширте бокову панель SDR#</b> (потягніть її край мишею).", base)))
+        "<b>Не видно «VOX dB»?</b> Перевірте, що натиснуто <b>Record</b> і в налаштуваннях увімкнено VOX, "
+        "потім ще раз двічі клацніть по написі стану.", base)))
     s.append(Spacer(1, 8))
     s.append(Paragraph("Так виглядає момент передачі — гейт відкритий, іде запис:", base))
     s.append(Spacer(1, 4))
@@ -558,7 +562,7 @@ def build_pdf(imgs):
                                        "менше RF gain — і крок 3 заново."),
         ("Взагалі не пише", "Перевірте, що натиснуто <b>Record</b> і стоять галочки <b>Don't write pause</b> + <b>VOX</b>; "
                             "чи не завищено <b>open</b> (має бути нижче рівня голосу S)."),
-        ("Не видно VOX dB", "Подвійний клік по написі стану; розширте бокову панель SDR#."),
+        ("Не видно VOX dB", "Натисніть Record, увімкніть VOX у Configure, двічі клацніть по написі стану."),
     ]
     data = [[Paragraph("Симптом", cellb), Paragraph("Рішення", cellb)]] + \
            [[Paragraph(a, cellb), Paragraph(b, cell)] for a, b in rows]
@@ -582,7 +586,8 @@ def build_pdf(imgs):
         "Як це працює: плагін бере пікове значення рівня звуку кілька разів на секунду. "
         "Рівень ≥ open — запис іде; рівень &lt; close — гейт закривається, ще «Continue recording» секунд "
         "дописується хвіст, далі пауза. Між open і close гейт тримає попередній стан (гістерезис), "
-        "тому запис не «тріпоче» на межі.", small))
+        "тому запис не «тріпоче» на межі. Ще 250 мс звуку до спрацювання дописуються на початок файлу "
+        "(pre-roll), тож перший склад не зрізається.", small))
 
     doc = SimpleDocTemplate(OUT, pagesize=A4, leftMargin=15 * mm, rightMargin=15 * mm,
                             topMargin=14 * mm, bottomMargin=16 * mm,
