@@ -20,6 +20,24 @@ NOTE: While I have been trying to maintain backwards compatibility with older SD
 
 =====================================================================================================
 
+Unreleased (develop)
+
+Fixed: VOX review findings (AudioRecorderPanel / SimpleRecorder / RecordingAudioProcessor / DialogConfigure)
+- Stale audio at the start of a file: between files in VOX mode the processor stays enabled, but the
+  writer could be left un-paused (split on frequency change, or "new file" time < "continue" time),
+  so up to ~1 s of old audio was written at the start of the next file. The writer is now kept
+  paused between files and the FIFO is flushed in StartRecording().
+- "close" above "open" made the gate toggle on every tick. The Configure dialog rejects it and the
+  gate clamps close to open at runtime (VoxGate.EffectiveCloseDb).
+- "mute" is greyed out in VOX mode and is now also ignored by the gate.
+- Peak meter race between the audio thread and the UI reset fixed (PeakMeter, Interlocked).
+- Added a 250 ms pre-roll (PreRollBuffer) so the first syllable is not cut by the gate latency.
+- Debug line split into two lines (REC / VOX) and anchored to the panel width - no longer clipped.
+- Removed unused RecordingAudioProcessor.LastDecibels.
+- Added unit tests for the VOX logic: tests/SDRSharp.AudioRecorder.Tests (dotnet test).
+
+=====================================================================================================
+
 1.3.13.0 - Release                                                                        30th June 2026
 
 Added: VOX recording mode (audio-level squelch with hysteresis) (RecordingAudioProcessor / AudioRecorderPanel / DialogConfigure)
