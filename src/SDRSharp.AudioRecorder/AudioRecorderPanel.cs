@@ -276,10 +276,13 @@ public class AudioRecorderPanel : UserControl
 		((Control)panel1).Name = "panel1";
 		((Control)panel1).Size = new Size(217, 190);
 		((Control)panel1).TabIndex = 7;
-		((Control)label3).AutoSize = true;
-		((Control)label3).Location = new Point(33, 152);
+		// Два рядки (REC / VOX) і розтягування разом із панеллю — інакше на вузькій
+		// боковій панелі SDR# хвіст із VOX dB обрізався.
+		((Control)label3).Anchor = (AnchorStyles)13;
+		((Control)label3).AutoSize = false;
+		((Control)label3).Location = new Point(6, 151);
 		((Control)label3).Name = "label3";
-		((Control)label3).Size = new Size(37, 13);
+		((Control)label3).Size = new Size(205, 28);
 		((Control)label3).TabIndex = 24;
 		((Control)label3).Text = "debug";
 		((Control)label3).Visible = false;
@@ -1474,7 +1477,7 @@ public class AudioRecorderPanel : UserControl
 		((Control)label3).Visible = _debugEnable;
 		if (_debugEnable)
 		{
-			((Control)label3).Text = "REC SR: " + num4 + " - REC level dB: " + _simpleRecorder.Decibels.ToString("#") + (UseAudioVox ? (" - VOX dB: " + _voxLevelDb.ToString("0") + (_voxOpen ? " [open]" : " [closed]")) : "");
+			((Control)label3).Text = "REC SR: " + num4 + " - REC level dB: " + _simpleRecorder.Decibels.ToString("#") + (UseAudioVox ? (Environment.NewLine + "VOX dB: " + _voxLevelDb.ToString("0") + (_voxOpen ? " [open]" : " [closed]")) : "");
 		}
 	}
 
