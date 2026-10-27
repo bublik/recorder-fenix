@@ -2,7 +2,7 @@
   <!-- Юніт-тести чистої логіки VOX. Компілюємо вихідники напряму (без SDR#/WinForms),
        тож тести запускаються на будь-якій ОС: dotnet test tests/SDRSharp.AudioRecorder.Tests -->
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net8.0</TargetFramework>
     <LangVersion>12.0</LangVersion>
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
     <Nullable>disable</Nullable>

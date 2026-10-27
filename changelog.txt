@@ -22,6 +22,11 @@ NOTE: While I have been trying to maintain backwards compatibility with older SD
 
 Unreleased (develop)
 
+Changed: target net8.0-windows (PR #9, net8 migration)
+- One DLL now runs in both SDR# hosts (SDRSharp.dotnet8.exe and SDRSharp.dotnet9.exe).
+- Compiles against ref/net8 SDR# DLLs (compile-time only); the SDR# DLLs are no longer shipped in
+  the release zip - duplicates in Plugins\ failed with "Assembly with same name is already loaded".
+
 Fixed: VOX review findings (AudioRecorderPanel / SimpleRecorder / RecordingAudioProcessor / DialogConfigure)
 - Stale audio at the start of a file: between files in VOX mode the processor stays enabled, but the
   writer could be left un-paused (split on frequency change, or "new file" time < "continue" time),

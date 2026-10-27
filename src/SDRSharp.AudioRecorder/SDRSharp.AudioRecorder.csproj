@@ -2,7 +2,7 @@
   <PropertyGroup>
     <AssemblyName>SDRSharp.AudioRecorder</AssemblyName>
     <UseWindowsForms>True</UseWindowsForms>
-    <TargetFramework>net9.0-windows</TargetFramework>
+    <TargetFramework>net8.0-windows</TargetFramework>
     <Platforms>x86;x64</Platforms>
     <Version>1.3.13.0</Version>
     <AssemblyVersion>1.3.13.0</AssemblyVersion>
@@ -22,19 +22,26 @@
   <PropertyGroup>
     <LangVersion>12.0</LangVersion>
     <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
-    <NoWarn>$(NoWarn);WFO1000;CA1416</NoWarn>
+    <!-- CS8012: ref/net8 DLLs come from the x64 host; they are compile-time only, so the
+         processor mismatch on x86 builds is harmless (the host's own DLLs load at runtime). -->
+    <NoWarn>$(NoWarn);WFO1000;CA1416;CS8012</NoWarn>
   </PropertyGroup>
   <PropertyGroup />
   <ItemGroup />
   <ItemGroup>
+    <!-- Compile-time only: net8 builds of SDR# rev 1921 (extracted from SDRSharp.dotnet8.exe).
+         At runtime the host's own SDRSharp.*.dll are used (both net8 and net9 hosts). -->
     <Reference Include="SDRSharp.Common">
-      <HintPath>../../SDRSharp.Common.dll</HintPath>
+      <HintPath>../../ref/net8/SDRSharp.Common.dll</HintPath>
+      <Private>false</Private>
     </Reference>
     <Reference Include="SDRSharp.PluginsCom">
-      <HintPath>../../SDRSharp.PluginsCom.dll</HintPath>
+      <HintPath>../../ref/net8/SDRSharp.PluginsCom.dll</HintPath>
+      <Private>false</Private>
     </Reference>
     <Reference Include="SDRSharp.Radio">
-      <HintPath>../../SDRSharp.Radio.dll</HintPath>
+      <HintPath>../../ref/net8/SDRSharp.Radio.dll</HintPath>
+      <Private>false</Private>
     </Reference>
   </ItemGroup>
 </Project>

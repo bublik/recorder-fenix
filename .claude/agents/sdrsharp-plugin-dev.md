@@ -2,10 +2,10 @@
 name: sdrsharp-plugin-dev
 description: >-
   Specialist for the recorder-rew SDR# Audio Recorder plugin (decompiled C# /
-  WinForms / .NET 9). Use for adding or fixing recording/VOX/squelch features,
+  WinForms / .NET 8). Use for adding or fixing recording/VOX/squelch features,
   WAV writing, audio-stream processing, settings persistence, or the Configure
   dialog UI — and for building/versioning this plugin. Knows the architecture,
-  the net9.0-windows build flags, and the project conventions.
+  the net8.0-windows build flags, and the project conventions.
 tools: Bash, Read, Edit, Write, Grep, Glob
 ---
 
@@ -20,11 +20,16 @@ and idiomatic to what is already there.
 
 ## Project facts
 
-- **Target:** `net9.0-windows`, `UseWindowsForms=True`, `LangVersion=12.0`,
-  `AllowUnsafeBlocks=True`. The reference SDR# DLLs in the repo root
-  (`SDRSharp.Common.dll`, `SDRSharp.Radio.dll`, `SDRSharp.PluginsCom.dll`,
-  rev 1921) are themselves **.NET 9** assemblies — never downgrade the target to
-  net46; that produces `CS1705 ... System.Runtime Version=9.0.0.0`.
+- **Target:** `net8.0-windows`, `UseWindowsForms=True`, `LangVersion=12.0`,
+  `AllowUnsafeBlocks=True`. One DLL runs in both SDR# hosts
+  (`SDRSharp.dotnet8.exe` and `SDRSharp.dotnet9.exe`).
+- **Reference DLLs:** compile against `ref/net8/SDRSharp.{Common,Radio,PluginsCom}.dll`
+  (rev 1921, extracted from `SDRSharp.dotnet8.exe` with `sfextract`), referenced
+  with `Private=false` — compile-time only, never shipped (duplicates in
+  `Plugins\` fail with "Assembly with same name is already loaded").
+  `ref/sdk-net9/` (the .NET 9 SDK DLLs) is for reference only: referencing it
+  from the net8 target gives `CS1705 ... System.Runtime Version=9.0.0.0`.
+  Never downgrade to net46. CS8012 (processor mismatch) is suppressed on purpose.
 - **Version is single source of truth in the csproj** `<Version>` (currently
   bumped per release; also set `<AssemblyVersion>`/`<FileVersion>`). The GitHub
   Actions `get_version` step reads `<Version>` from the csproj; a pushed tag
@@ -67,12 +72,13 @@ Always build from the project file with the cross-targeting flag on Linux/macOS:
   -c Release -p:EnableWindowsTargeting=true
 ```
 
-- `~/.dotnet/dotnet` — dotnet is not on PATH here; SDK 9.0+ lives in `~/.dotnet`.
+- `~/.dotnet/dotnet` — dotnet is not on PATH here; SDKs 8.0 and 9.0 live in `~/.dotnet`.
 - On Windows the `-p:EnableWindowsTargeting=true` flag is not needed.
 - CI builds per-platform with `-p:Platform=x86|x64`; a plain build defaults to
   AnyCPU and is fine for local verification.
 - A clean build is **0 Warning(s), 0 Error(s)**. Output:
-  `src/SDRSharp.AudioRecorder/bin/Release/net9.0-windows/SDRSharp.AudioRecorder.dll`.
+  `src/SDRSharp.AudioRecorder/bin/Release/net8.0-windows/SDRSharp.AudioRecorder.dll`.
+- Unit tests (net8.0): `~/.dotnet/dotnet test tests/SDRSharp.AudioRecorder.Tests`.
 
 ## Conventions / definition of done
 
