@@ -108,6 +108,9 @@ public class AudioRecorderPanel : UserControl
 	// Покриває затримку гейта (тік таймера) — не зрізається перший склад.
 	private const int VoxPreRollMs = 250;
 
+	// Частота, на якій накопичувався pre-roll: після перестроювання він відкидається.
+	private long _voxFrequency;
+
 	private bool _comCmdError;
 
 	private bool _simpleRecorderError;
@@ -1089,6 +1092,9 @@ public class AudioRecorderPanel : UserControl
 			_fileIndexer = 0;
 			_voxGate.Reset();
 			_simpleRecorder.ConfigurePreRoll(_audioProcessor.SampleRate, UseAudioVox ? VoxPreRollMs : 0);
+			// Процесор ще вимкнений — скидання pre-roll від попереднього сеансу без гонок.
+			_simpleRecorder.ResetPreRoll();
+			_voxFrequency = _control.Frequency;
 			if (UseAudioVox)
 			{
 				// Вмикаємо вимір рівня одразу при озброєнні, ще до першого спрацювання VOX.
@@ -1372,6 +1378,12 @@ public class AudioRecorderPanel : UserControl
 		_simpleRecorder.ConfigurePreRoll(_audioProcessor.SampleRate, UseAudioVox ? VoxPreRollMs : 0);
 		if (UseAudioVox)
 		{
+			if (_voxFrequency != _control.Frequency)
+			{
+				// Аудіо з попередньої частоти не повинно потрапити на початок нового файлу.
+				_voxFrequency = _control.Frequency;
+				_simpleRecorder.ResetPreRoll();
+			}
 			// Тримаємо аудіопроцесор увімкненим, поки озброєні, щоб рівень мірявся
 			// до старту запису й між файлами — інакше VOX не «побачив» би сигнал
 			// (процесор інакше вмикається лише під час запису).

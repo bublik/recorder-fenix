@@ -250,6 +250,17 @@ public class SimpleRecorder : IDisposable
 		}
 	}
 
+	// Відкидає накопичений pre-roll (нове озброєння, зміна частоти), щоб на початок файлу
+	// не потрапило старе аудіо. Підміняє об'єкт цілком — аудіопотік не мутується з UI.
+	public void ResetPreRoll()
+	{
+		PreRollBuffer preRoll = _preRoll;
+		if (preRoll != null && preRoll.Count > 0)
+		{
+			_preRoll = new PreRollBuffer(preRoll.Capacity);
+		}
+	}
+
 	public unsafe void AudioSamplesIn(object audio, SamplesAvailableEventArgs args)
 	{
 		_audioBufferLength = args.Length;
