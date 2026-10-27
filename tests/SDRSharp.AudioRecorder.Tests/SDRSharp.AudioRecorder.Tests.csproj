@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- Юніт-тести чистої логіки VOX. Компілюємо вихідники напряму (без SDR#/WinForms),
+       тож тести запускаються на будь-якій ОС: dotnet test tests/SDRSharp.AudioRecorder.Tests -->
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <LangVersion>12.0</LangVersion>
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+    <Nullable>disable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../src/SDRSharp.AudioRecorder/VoxGate.cs" Link="Src/VoxGate.cs" />
+    <Compile Include="../../src/SDRSharp.AudioRecorder/PeakMeter.cs" Link="Src/PeakMeter.cs" />
+    <Compile Include="../../src/SDRSharp.AudioRecorder/PreRollBuffer.cs" Link="Src/PreRollBuffer.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+</Project>

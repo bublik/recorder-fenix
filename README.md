@@ -49,7 +49,7 @@
 будь-якої модуляції (зокрема SSB/CW/AM):
 
 - `RecordingAudioProcessor` безперервно міряє пік аудіо в `Process()` (незалежно від стану
-  запису/паузи) і віддає його як `Decibels` (піко-холд зі скиданням при зчитуванні) / `LastDecibels`.
+  запису/паузи) і віддає його як `Decibels` (піко-холд зі скиданням при зчитуванні, `PeakMeter`).
 - **Гістерезис** двома порогами: `open ≥ dB` відкриває гейт, `close < dB` — закриває.
   Типові значення: open −30 dB, close −40 dB. Комбінується з hang-time `Continue recording`.
 - VOX — **окремий режим** і має пріоритет над squelch у `SignalIsActive()`; поки VOX активний,
@@ -66,6 +66,21 @@
    у debug-рядку (подвійний клік по індикатору запису вмикає debug).
 3. `Record` — пишуться лише повідомлення, окремими файлами.
 
+Покрокова ілюстрована інструкція для операторів: `docs/vox-guide/VOX_Setup_Guide_UA.pdf`.
+
+### Виправлення VOX після рев'ю (develop, ще не в релізі)
+
+- Новий файл більше не починається із застарілого аудіо: між файлами запис у FIFO на паузі,
+  а `StartRecording()` очищає FIFO.
+- `close` вищий за `open` давав «тріпотіння» гейта на кожному тіку: діалог не приймає такі пороги,
+  а `VoxGate` у рантаймі обмежує close до open (на випадок ручного редагування конфіга).
+- `mute` у режимі VOX неактивний у діалозі — тепер і не впливає на гейт.
+- Атомарний `PeakMeter` замість гонки між аудіопотоком і UI-скиданням піку.
+- **Pre-roll 250 мс** (`PreRollBuffer`): аудіо до спрацювання VOX дописується на початок —
+  не зрізається перший склад.
+- Debug-рядок розбито на два рядки (`REC …` / `VOX dB …`) і розтягнуто з панеллю — не обрізається.
+- Прибрано невикористаний `LastDecibels`.
+
 ---
 
 ## Структура репозиторію
@@ -79,13 +94,18 @@ recorder-fenix/
 │       ├── AudioRecorderPlugin.cs      — точка входу плагіна
 │       ├── DialogConfigure.cs          — вікно налаштувань
 │       ├── MemoryEntry.cs              — запис з менеджера частот
+│       ├── PeakMeter.cs                — атомарний вимір піку аудіо (VOX)
+│       ├── PreRollBuffer.cs            — кільцевий буфер pre-roll (VOX)
 │       ├── RecordingAudioProcessor.cs  — аудіо-процесор
 │       ├── SamplesAvailableEventArgs.cs
 │       ├── SettingsPersister.cs        — збереження налаштувань
 │       ├── SimpleRecorder.cs           — логіка запису і потік DiskWriter
 │       ├── SimpleWavWriter.cs          — запис WAV-файлів
+│       ├── VoxGate.cs                  — гейт VOX з гістерезисом
 │       ├── WavFormatHeader.cs
 │       └── WavSampleFormat.cs
+├── tests/SDRSharp.AudioRecorder.Tests/ — юніт-тести логіки VOX (net9.0, xUnit)
+├── docs/vox-guide/                     — PDF-інструкція з VOX і генератор
 ├── SDRSharp.AudioRecorder.dll          — оригінальний DLL v1.3.10.0
 ├── SDRSharp.Common.dll                 — залежність SDR# (rev 1921)
 ├── SDRSharp.Radio.dll                  — залежність SDR# (rev 1921)
@@ -138,6 +158,15 @@ dotnet build SDRSharp.AudioRecorder.csproj -c Release -p:EnableWindowsTargeting=
 ```
 
 Результат: `src/SDRSharp.AudioRecorder/bin/Release/net9.0-windows/SDRSharp.AudioRecorder.dll`
+
+### Тести
+
+Логіка VOX (`VoxGate`, `PeakMeter`, `PreRollBuffer`) не залежить від SDR#/WinForms, тому тести
+запускаються на будь-якій ОС:
+
+```bash
+dotnet test tests/SDRSharp.AudioRecorder.Tests
+```
 
 ### Крок 3 — Перевірити збірку
 

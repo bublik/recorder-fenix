@@ -42,7 +42,13 @@ and idiomatic to what is already there.
   (open/close dB) and is computed **once per timer tick** because reading
   `Decibels` resets the peak accumulator.
 - `RecordingAudioProcessor.cs` — audio stream hook; continuous peak metering in
-  `Process()`, exposed as `Decibels` (peak-hold, reset on read) / `LastDecibels`.
+  `Process()` via `PeakMeter` (atomic, allocation-free), exposed as `Decibels`
+  (peak-hold, reset on read).
+- `VoxGate.cs` / `PeakMeter.cs` / `PreRollBuffer.cs` — pure VOX logic with no
+  SDR#/WinForms deps (hysteresis + close<=open clamp, atomic peak, 250 ms
+  pre-roll ring). Covered by `tests/SDRSharp.AudioRecorder.Tests`
+  (`~/.dotnet/dotnet test tests/SDRSharp.AudioRecorder.Tests`). Keep new pure
+  logic in such files so it stays testable on Linux.
 - `DialogConfigure.cs` — Configure dialog (WinForms `InitializeComponent`,
   control wiring, tooltips). VOX checkbox + open/close dB NumericUpDowns live here.
 - `SimpleRecorder.cs` — recording logic + DiskWriter thread. Watch for
