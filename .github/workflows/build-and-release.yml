@@ -146,9 +146,8 @@ jobs:
           Copy-Item -Path (Join-Path $outputDir "SDRSharp.AudioRecorder.pdb") -Destination $packageDir -Force
         }
 
-        Copy-Item -Path "SDRSharp.Common.dll" -Destination $packageDir -Force
-        Copy-Item -Path "SDRSharp.PluginsCom.dll" -Destination $packageDir -Force
-        Copy-Item -Path "SDRSharp.Radio.dll" -Destination $packageDir -Force
+        # SDRSharp.Common/Radio/PluginsCom.dll are NOT shipped: the host (net8 or net9)
+        # provides its own, and duplicates in Plugins\ fail with "Assembly with same name is already loaded".
 
         if (Test-Path "README.md") {
           Copy-Item -Path "README.md" -Destination $packageDir -Force
@@ -158,13 +157,12 @@ jobs:
           Copy-Item -Path "changelog.txt" -Destination $packageDir -Force
         }
 
-        Compress-Archive -Path "$packageDir/*" -DestinationPath "SDRSharp.AudioRecorder-${{ needs.version.outputs.VERSION }}-${{ matrix.platform }}.zip" -Force
-
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
         name: SDRSharp.AudioRecorder-${{ needs.version.outputs.VERSION }}-${{ matrix.platform }}
-        path: SDRSharp.AudioRecorder-${{ needs.version.outputs.VERSION }}-${{ matrix.platform }}.zip
+        # Upload the folder, not a .zip: upload-artifact zips it itself (a .zip here ends up zip-in-zip).
+        path: SDRSharp.AudioRecorder-${{ needs.version.outputs.VERSION }}-${{ matrix.platform }}/
         retention-days: 90
 
   release:
@@ -180,7 +178,15 @@ jobs:
       with:
         pattern: SDRSharp.AudioRecorder-${{ needs.version.outputs.VERSION }}-*
         path: release-assets
-        merge-multiple: true
+
+    # Each artifact is downloaded into release-assets/<artifact-name>/; zip each one for the release.
+    - name: Create release zips
+      shell: pwsh
+      run: |
+        Get-ChildItem -Path release-assets -Directory | ForEach-Object {
+          Compress-Archive -Path "$($_.FullName)/*" -DestinationPath "release-assets/$($_.Name).zip" -Force
+        }
+        Get-ChildItem -Path release-assets -Filter *.zip
 
     - name: Create Release
       uses: softprops/action-gh-release@v1

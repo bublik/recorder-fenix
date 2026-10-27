@@ -3,7 +3,8 @@
 Форк плагіна **Audio Recorder** для SDR# (by Vasili / thewraith).  
 Містить декомпільований вихідний код версії `1.3.10.0` з виправленими критичними помилками.
 Версія `1.3.11.0` — фікси; версія `1.3.13.0` — додано режим **VOX** (гейтинг запису за рівнем
-аудіо), який працює для SSB (USB/LSB)/CW, де штатний squelch SDR# недоступний.
+аудіо), який працює для SSB (USB/LSB)/CW, де штатний squelch SDR# недоступний; версія `1.3.14.0` —
+перехід на .NET 8 (одна DLL для SDR# під net8 і net9) і виправлення VOX.
 
 ---
 
@@ -68,18 +69,21 @@
 
 Покрокова ілюстрована інструкція для операторів: `docs/vox-guide/VOX_Setup_Guide_UA.pdf`.
 
-### Виправлення VOX після рев'ю (develop, ще не в релізі)
+## Що змінено у v1.3.14.0
 
-- Новий файл більше не починається із застарілого аудіо: між файлами запис у FIFO на паузі,
-  а `StartRecording()` очищає FIFO.
-- `close` вищий за `open` давав «тріпотіння» гейта на кожному тіку: діалог не приймає такі пороги,
-  а `VoxGate` у рантаймі обмежує close до open (на випадок ручного редагування конфіга).
-- `mute` у режимі VOX неактивний у діалозі — тепер і не впливає на гейт.
-- Атомарний `PeakMeter` замість гонки між аудіопотоком і UI-скиданням піку.
-- **Pre-roll 250 мс** (`PreRollBuffer`): аудіо до спрацювання VOX дописується на початок —
-  не зрізається перший склад.
-- Debug-рядок розбито на два рядки (`REC …` / `VOX dB …`) і розтягнуто з панеллю — не обрізається.
-- Прибрано невикористаний `LastDecibels`.
+- **.NET 8:** плагін тепер `net8.0-windows` — одна DLL працює і в `SDRSharp.dotnet8.exe`, і в
+  `SDRSharp.dotnet9.exe`. DLL SDR# (`ref/net8/`) потрібні лише для компіляції й у реліз не входять.
+- Виправлення VOX після рев'ю:
+  - Новий файл більше не починається із застарілого аудіо: між файлами запис у FIFO на паузі,
+    а `StartRecording()` очищає FIFO.
+  - `close` вищий за `open` давав «тріпотіння» гейта на кожному тіку: діалог не приймає такі пороги,
+    а `VoxGate` у рантаймі обмежує close до open (на випадок ручного редагування конфіга).
+  - `mute` у режимі VOX неактивний у діалозі — тепер і не впливає на гейт.
+  - Атомарний `PeakMeter` замість гонки між аудіопотоком і UI-скиданням піку.
+  - **Pre-roll 250 мс** (`PreRollBuffer`): аудіо до спрацювання VOX дописується на початок —
+    не зрізається перший склад.
+  - Debug-рядок розбито на два рядки (`REC …` / `VOX dB …`) і розтягнуто з панеллю — не обрізається.
+  - Прибрано невикористаний `LastDecibels`.
 
 ---
 
@@ -104,12 +108,12 @@ recorder-fenix/
 │       ├── VoxGate.cs                  — гейт VOX з гістерезисом
 │       ├── WavFormatHeader.cs
 │       └── WavSampleFormat.cs
-├── tests/SDRSharp.AudioRecorder.Tests/ — юніт-тести логіки VOX (net9.0, xUnit)
+├── tests/SDRSharp.AudioRecorder.Tests/ — юніт-тести логіки VOX (net8.0, xUnit)
 ├── docs/vox-guide/                     — PDF-інструкція з VOX і генератор
-├── SDRSharp.AudioRecorder.dll          — оригінальний DLL v1.3.10.0
-├── SDRSharp.Common.dll                 — залежність SDR# (rev 1921)
-├── SDRSharp.Radio.dll                  — залежність SDR# (rev 1921)
-├── SDRSharp.PluginsCom.dll
+├── ref/
+│   ├── net8/                           — DLL SDR# rev 1921 під .NET 8 (тільки для компіляції)
+│   ├── sdk-net9/                       — SDK SDR# rev 1921 (.NET 9), для довідки, у збірці не використовується
+│   └── original-1.3.10/                — оригінальний SDRSharp.AudioRecorder.dll v1.3.10.0
 ├── Audio_Recorder.pdf                  — оригінальна документація
 └── changelog.txt
 ```
@@ -118,23 +122,30 @@ recorder-fenix/
 
 ## Як зібрати нову версію
 
-Плагін цілить у **`net9.0-windows`** (`UseWindowsForms`), бо DLL сучасних збірок SDR#
-(rev 1921 у корені репозиторію) самі під **.NET 9**. Старіші ревізії README згадували
-`.NET Framework 4.6` — це **застаріло**: проти net9-збірок SDR# плагін має бути теж net9,
-інакше отримаєте `CS1705 ... uses System.Runtime Version=9.0.0.0 which has a higher version`.
+Плагін цілить у **`net8.0-windows`** (`UseWindowsForms`). Одна й та сама DLL працює в обох
+збірках SDR# — `SDRSharp.dotnet8.exe` і `SDRSharp.dotnet9.exe` (рантайм .NET 9 вантажить net8-збірки).
+
+Компіляція йде проти DLL з `ref/net8/` — це `SDRSharp.Common/Radio/PluginsCom.dll` rev 1921,
+витягнуті з single-file бандла `SDRSharp.dotnet8.exe` (`sfextract`). Їхній публічний API збігається
+з SDK (net9) та з хостом net9. Ці DLL потрібні **лише при компіляції** (`Private=false`) і в
+дистрибутив не потрапляють: під час роботи плагін використовує DLL самого SDR#.
+SDK-DLL з `ref/sdk-net9/` зібрані під .NET 9, тому з net8-таргетом дають `CS1705`.
 
 > ℹ️ **Збірка на Linux/macOS** працює, але потрібен прапор `-p:EnableWindowsTargeting=true`
 > (на не-Windows таргет `*-windows` інакше не резолвиться). На **Windows** прапор не потрібен.
 
 ### Вимоги
 
-- **.NET SDK 9.0 або новіший** ([dotnet.microsoft.com/download](https://dotnet.microsoft.com/download))
+- **.NET SDK 8.0 або новіший** ([dotnet.microsoft.com/download](https://dotnet.microsoft.com/download))
   — на Windows підійде Visual Studio 2022 з компонентом `.NET desktop development`.
-  (SDK 8.0 НЕ підійде — не вміє таргетити `net9.0`.)
-- **SDR#** — потрібні три DLL: `SDRSharp.Common.dll`, `SDRSharp.Radio.dll`,
-  `SDRSharp.PluginsCom.dll`. Вони вже лежать у корені репозиторію (rev 1921);
-  за потреби замініть їх на DLL зі своєї версії SDR# (і, якщо вона старіша/інша за .NET,
-  узгодьте `TargetFramework` у `.csproj`).
+- **SDR#** — потрібні три DLL під .NET 8: `SDRSharp.Common.dll`, `SDRSharp.Radio.dll`,
+  `SDRSharp.PluginsCom.dll`. Вони вже лежать у `ref/net8/` (rev 1921). Щоб оновити їх під
+  нову ревізію SDR#:
+  ```bash
+  dotnet tool install -g sfextract
+  sfextract "C:\Program Files\sdrsharp\SDRSharp.dotnet8.exe" -o extracted
+  # скопіюйте extracted/SDRSharp.{Common,Radio,PluginsCom}.dll у ref/net8/
+  ```
 
 ### Крок 1 — Очистити старі артефакти
 
@@ -157,7 +168,7 @@ dotnet build SDRSharp.AudioRecorder.csproj -c Release
 dotnet build SDRSharp.AudioRecorder.csproj -c Release -p:EnableWindowsTargeting=true
 ```
 
-Результат: `src/SDRSharp.AudioRecorder/bin/Release/net9.0-windows/SDRSharp.AudioRecorder.dll`
+Результат: `src/SDRSharp.AudioRecorder/bin/<Platform>/Release/net8.0-windows/SDRSharp.AudioRecorder.dll`
 
 ### Тести
 
@@ -170,14 +181,15 @@ dotnet test tests/SDRSharp.AudioRecorder.Tests
 
 ### Крок 3 — Перевірити збірку
 
-Очікувано **`0 Warning(s), 0 Error(s)`**. Якщо бачите `NETSDK1045 ... does not support
-targeting .NET 9.0` — встановлено застарілий SDK (8.0 чи нижче), потрібен **.NET SDK 9.0+**.
-Якщо `CS1705 ... System.Runtime Version=9.0.0.0 higher version` — таргет проєкту не збігається
-з .NET-версією DLL SDR#; узгодьте `TargetFramework` у `.csproj`.
+Очікувано **`0 Warning(s), 0 Error(s)`**. Якщо `CS1705 ... System.Runtime Version=9.0.0.0 higher
+version` — у `ref/net8/` потрапили DLL з net9-збірки SDR# (або з SDK); візьміть їх із
+`SDRSharp.dotnet8.exe`.
 
 ### Крок 4 — Встановити плагін
 
-1. Скопіюйте `SDRSharp.AudioRecorder.dll` в папку SDR#.
+1. Скопіюйте **тільки** `SDRSharp.AudioRecorder.dll` в папку SDR#. `SDRSharp.Common/Radio/PluginsCom.dll`
+   класти поруч **не треба**: вони вже є в SDR#, а дублікати дають `Assembly with same name is already loaded`
+   у `PluginError.log`.
 2. Для SDR# **до v1800** — додайте в `Plugins.xml`:
    ```xml
    <add key="AudioRecorder" value="SDRSharp.AudioRecorder.AudioRecorderPlugin,SDRSharp.AudioRecorder" />
