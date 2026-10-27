@@ -30,6 +30,9 @@ public class SimpleRecorder : IDisposable
 
 	private volatile bool _diskWriterPause;
 
+	// Pre-roll для VOX: замінюється цілим об'єктом з UI-потоку, читається/пишеться з аудіопотоку.
+	private volatile PreRollBuffer _preRoll;
+
 	private string _fileName;
 
 	private double _sampleRate;
@@ -232,11 +235,31 @@ public class SimpleRecorder : IDisposable
 		FreeBuffers();
 	}
 
+	// Тримати останні milliseconds мс аудіо, поки запис на паузі, і дописувати їх перед першим
+	// буфером після зняття паузи. 0 — вимкнути. Перевиділяє буфер лише при зміні розміру.
+	public void ConfigurePreRoll(double sampleRate, int milliseconds)
+	{
+		int capacity = ((milliseconds > 0 && sampleRate > 0.0) ? ((int)(sampleRate * (double)milliseconds / 1000.0) * 2) : 0);
+		if (capacity <= 0)
+		{
+			_preRoll = null;
+		}
+		else if (_preRoll == null || _preRoll.Capacity != capacity)
+		{
+			_preRoll = new PreRollBuffer(capacity);
+		}
+	}
+
 	public unsafe void AudioSamplesIn(object audio, SamplesAvailableEventArgs args)
 	{
 		_audioBufferLength = args.Length;
+		PreRollBuffer preRoll = _preRoll;
 		if (!_diskWriterPause)
 		{
+			if (preRoll != null && preRoll.Count > 0)
+			{
+				WritePreRoll(preRoll);
+			}
 			if ((double)_audioBuffer.Length < _sampleRate)
 			{
 				_audioBuffer.Write(args.Buffer, args.Length);
@@ -249,10 +272,32 @@ public class SimpleRecorder : IDisposable
 		}
 		else
 		{
+			preRoll?.Write(args.Buffer, args.Length);
 			_decibels = -100.0;
 		}
 		_bufferUsage = (int)((double)_audioBuffer.Length / _sampleRate * 100.0);
 		_bufferUsage = Math.Max(_bufferUsage, 0);
+	}
+
+	private unsafe void WritePreRoll(PreRollBuffer preRoll)
+	{
+		if ((double)_audioBuffer.Length < _sampleRate)
+		{
+			preRoll.GetSegments(out var start, out var len1, out var len2);
+			fixed (float* ptr = preRoll.Data)
+			{
+				if (len1 > 0)
+				{
+					_audioBuffer.Write(ptr + start, len1);
+				}
+				if (len2 > 0)
+				{
+					_audioBuffer.Write(ptr, len2);
+				}
+			}
+			_bufferEvent.Set();
+		}
+		preRoll.Clear();
 	}
 
 	public unsafe void ScaleAudio(float* audio, int length)
@@ -418,6 +463,8 @@ public class SimpleRecorder : IDisposable
 	{
 		if (_diskWriter == null)
 		{
+			// Новий файл не повинен починатися з аудіо, що лишилося у FIFO з часу між файлами.
+			_audioBuffer.Flush();
 			_bufferEvent.Reset();
 			_wavWriter = new SimpleWavWriter(_fileName, _wavSampleFormat, (uint)_sampleRate, _samplerateOut);
 			_wavWriter.Open();

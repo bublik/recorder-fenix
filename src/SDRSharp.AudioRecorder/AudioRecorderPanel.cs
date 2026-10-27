@@ -101,10 +101,12 @@ public class AudioRecorderPanel : UserControl
 
 	private bool _debugEnable;
 
-	// Поточний стан VOX-гейта (з гістерезисом) і останній виміряний рівень у dB.
-	private bool _voxOpen;
+	// VOX-гейт (гістерезис open/close) і останній виміряний рівень у dB.
+	private readonly VoxGate _voxGate = new VoxGate();
 
-	private double _voxLevelDb = -100.0;
+	// Скільки аудіо до спрацювання VOX дописувати на початок запису (pre-roll), мс.
+	// Покриває затримку гейта (тік таймера) — не зрізається перший склад.
+	private const int VoxPreRollMs = 250;
 
 	private bool _comCmdError;
 
@@ -168,10 +170,30 @@ public class AudioRecorderPanel : UserControl
 	public bool UseAudioVox { get; set; }
 
 	// Поріг відкриття VOX (dB). Сигнал вважається активним, коли рівень >= цього значення.
-	public double VoxOpenDb { get; set; }
+	public double VoxOpenDb
+	{
+		get
+		{
+			return _voxGate.OpenDb;
+		}
+		set
+		{
+			_voxGate.OpenDb = value;
+		}
+	}
 
 	// Поріг закриття VOX (dB). Зазвичай нижчий за VoxOpenDb — це і дає гістерезис.
-	public double VoxCloseDb { get; set; }
+	public double VoxCloseDb
+	{
+		get
+		{
+			return _voxGate.CloseDb;
+		}
+		set
+		{
+			_voxGate.CloseDb = value;
+		}
+	}
 
 	public string PluginVersion => "Audio Recorder - v" + ((Control)this).ProductVersion;
 
@@ -873,14 +895,15 @@ public class AudioRecorderPanel : UserControl
 		if (UseAudioVox)
 		{
 			// VOX — окремий режим: ігнорує штатний squelch SDR#.
-			// Стан _voxOpen оновлюється раз на тік у UpdateVox().
-			flag = _voxOpen;
+			// Стан гейта оновлюється раз на тік у UpdateVox().
+			flag = _voxGate.IsOpen;
 		}
 		else if (UseSquelch)
 		{
 			flag = _control.IsSquelchOpen || !_control.SquelchEnabled;
 		}
-		if (UseMute)
+		// У режимі VOX чекбокс mute неактивний у діалозі, тож і тут його не враховуємо.
+		if (UseMute && !UseAudioVox)
 		{
 			flag &= !_control.AudioIsMuted;
 		}
@@ -891,19 +914,7 @@ public class AudioRecorderPanel : UserControl
 	// бо зчитування _audioProcessor.Decibels скидає накопичувач піку.
 	private void UpdateVox()
 	{
-		double num = _audioProcessor.Decibels;
-		_voxLevelDb = num;
-		if (_voxOpen)
-		{
-			if (num < VoxCloseDb)
-			{
-				_voxOpen = false;
-			}
-		}
-		else if (num >= VoxOpenDb)
-		{
-			_voxOpen = true;
-		}
+		_voxGate.Update(_audioProcessor.Decibels);
 	}
 
 	private void RecordLabel(string text, Color color)
@@ -1076,7 +1087,8 @@ public class AudioRecorderPanel : UserControl
 			_filesCounter = 0;
 			_writeAllSecond = 0f;
 			_fileIndexer = 0;
-			_voxOpen = false;
+			_voxGate.Reset();
+			_simpleRecorder.ConfigurePreRoll(_audioProcessor.SampleRate, UseAudioVox ? VoxPreRollMs : 0);
 			if (UseAudioVox)
 			{
 				// Вмикаємо вимір рівня одразу при озброєнні, ще до першого спрацювання VOX.
@@ -1098,7 +1110,7 @@ public class AudioRecorderPanel : UserControl
 				// Озброєні без запису (VOX чекав сигнал) — глушимо процесор вручну.
 				_audioProcessor.Enabled = false;
 			}
-			_voxOpen = false;
+			_voxGate.Reset();
 			((Control)recordLabel).Visible = false;
 		}
 		ConfigureGUI();
@@ -1356,6 +1368,8 @@ public class AudioRecorderPanel : UserControl
 			MessageBox.Show("AudioRecorder: You do not have enough HDD space to continue recording", "ALERT", (MessageBoxButtons)0);
 			return;
 		}
+		// Розмір pre-roll залежить від частоти дискретизації й режиму — перевиділяється лише при зміні.
+		_simpleRecorder.ConfigurePreRoll(_audioProcessor.SampleRate, UseAudioVox ? VoxPreRollMs : 0);
 		if (UseAudioVox)
 		{
 			// Тримаємо аудіопроцесор увімкненим, поки озброєні, щоб рівень мірявся
@@ -1363,6 +1377,9 @@ public class AudioRecorderPanel : UserControl
 			// (процесор інакше вмикається лише під час запису).
 			if (!_simpleRecorder.IsRecording)
 			{
+				// Між файлами аудіо йде лише в pre-roll, а не у FIFO запису —
+				// інакше застаріле аудіо потрапило б на початок наступного файлу.
+				_simpleRecorder.DiskWriterPause = true;
 				_audioProcessor.Enabled = true;
 			}
 			UpdateVox();
@@ -1477,7 +1494,7 @@ public class AudioRecorderPanel : UserControl
 		((Control)label3).Visible = _debugEnable;
 		if (_debugEnable)
 		{
-			((Control)label3).Text = "REC SR: " + num4 + " - REC level dB: " + _simpleRecorder.Decibels.ToString("#") + (UseAudioVox ? (Environment.NewLine + "VOX dB: " + _voxLevelDb.ToString("0") + (_voxOpen ? " [open]" : " [closed]")) : "");
+			((Control)label3).Text = "REC SR: " + num4 + " - REC level dB: " + _simpleRecorder.Decibels.ToString("#") + (UseAudioVox ? (Environment.NewLine + "VOX dB: " + _voxGate.LastLevelDb.ToString("0") + (_voxGate.IsOpen ? " [open]" : " [closed]")) : "");
 		}
 	}
 
