@@ -179,6 +179,15 @@ public class DialogConfigure : Form
 
 	private void btnOk_Click(object sender, EventArgs e)
 	{
+		// close вище за open дає «тріпотіння» гейта на кожному тіку — не приймаємо такі пороги.
+		// Перевіряємо лише коли поля VOX активні — інакше користувач не зміг би їх виправити.
+		if (dontWritePauseCheckBox.Checked && useAudioVoxCheckBox.Checked && !VoxGate.IsValidThresholds((double)voxOpenNumericUpDown.Value, (double)voxCloseNumericUpDown.Value))
+		{
+			MessageBox.Show("AudioRecorder: VOX 'close' threshold must not be higher than 'open'.\nExample: open -32 dB, close -38 dB.", "VOX", (MessageBoxButtons)0, (MessageBoxIcon)48);
+			((Form)this).DialogResult = (DialogResult)0;
+			((Control)voxCloseNumericUpDown).Focus();
+			return;
+		}
 		_recorder.DontWritePause = dontWritePauseCheckBox.Checked;
 		_recorder.WriteOneFile = writeOneFileCheckBox.Checked;
 		_recorder.UseMute = useMuteCheckBox.Checked;
